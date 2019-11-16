@@ -1144,7 +1144,7 @@ struct Color {
 		a = float(hex & 0xFF) / 255.0f;
 	}
 
-	int operator [](unsigned int i) const {
+	inline int operator [](unsigned int i) const {
 		switch (i) {
 			default:
 			case 0: return int(r * 255.0f);
@@ -1154,13 +1154,20 @@ struct Color {
 		}
 	}
 
-	Color bright(float v) const {
+	inline Color bright(float v) const {
 		Color col;
 		col.r = std::max(std::min(r * v, 1.0f), 0.0f);
 		col.g = std::max(std::min(g * v, 1.0f), 0.0f);
 		col.b = std::max(std::min(b * v, 1.0f), 0.0f);
 		col.a = a;
 		return col;
+	}
+
+	inline int hex() const {
+		return ((*this)[0] & 0xFF) << 24 |
+				((*this)[1] & 0xFF) << 16 |
+				((*this)[2] & 0xFF) << 8 |
+				((*this)[3] & 0xFF);
 	}
 };
 
@@ -1201,8 +1208,8 @@ public:
 		// Style
 		m_themeColors["base"] = Color(0x555555FF);
 		m_themeColors["text"] = Color(0xFFFFFFFF);
-		m_themeParams["containerPadding"] = 5;
-		m_themeParams["containerGap"] = 5;
+		m_themeParams["containerPadding"] = 4;
+		m_themeParams["containerGap"] = 4;
 	}
 
 	inline ~GUI() {
@@ -1355,12 +1362,12 @@ public:
 		return rec;
 	}
 
-	inline int chr(int x, int y, char c) {
+	inline int chr(int x, int y, char c, int color = -1) {
 		c = c & 0x7F;
 		if (c < ' ') c = 0;
 		else 		 c -= ' ';
 
-		const Color fg = m_themeColors["text"];
+		const Color fg = color < 0 ? m_themeColors["text"] : Color(color);
 		const Color sh = Color(0x000000FF);
 
 		SDL_SetTextureBlendMode(m_font, SDL_BLENDMODE_BLEND);
@@ -1397,7 +1404,7 @@ public:
 		return spl.size() * 16;
 	}
 
-	inline void text(int x, int y, const std::string& txt, Overflow overflow = Overflow::OverfowNone) {
+	inline void text(int x, int y, const std::string& txt, Overflow overflow = Overflow::OverfowNone, int color = -1) {
 		auto spl = tokenize(txt, ' ');
 		Rect parent = parentRect();
 
@@ -1423,7 +1430,7 @@ public:
 					ty += 16;
 					tx = parent.x + x;
 				} else {
-					tx = chr(tx, ty, c);
+					tx = chr(tx, ty, c, color);
 				}
 			}
 			if (stop) break;
@@ -1475,6 +1482,79 @@ public:
 		this->text(btn.w / 2 - tw / 2, btn.h / 2 - th / 2, text);
 
 		return m_state.mouseDown && m_state.hoveredItem == id && m_state.activeItem == id;
+	}
+
+	inline bool slider(int id, float* v, float vmin = 0.0f, float vmax = 1.0f, const std::string& fmt = "%.3f") {
+		Rect parent = parentRect();
+		if (parent.hit(m_state.mouseX, m_state.mouseY)) {
+			m_state.hoveredItem = id;
+			if (m_state.activeItem == 0 && m_state.mouseDown) {
+				m_state.activeItem = id;
+			}
+		}
+
+		const int thumbSize = 16;
+		const int width = parent.w - (thumbSize + 6);
+		const float maxVal = (vmax - vmin);
+
+		float ratio = ((*v) - vmin) / maxVal;
+		int rel = int(ratio * float(width)) + 3;
+
+		const Color base = m_themeColors["base"].bright(0.9f);
+		const Color hover = m_themeColors["base"].bright(1.2f);
+		const Color track = m_themeColors["base"].bright(0.5f);
+		const Color active = m_themeColors["base"].bright(0.6f);
+		const Color fg = m_themeColors["base"].bright(2.0f);
+		
+		Color tex = m_themeColors["text"];
+		tex.a = 0.3f;
+
+		SDL_Rect dst = { parent.x, parent.y, parent.w , parent.h };
+		SDL_Rect dst1 = { parent.x+1, parent.y+1, parent.w , parent.h };
+
+		SDL_Rect dstT = { parent.x + rel, parent.y + 3, thumbSize, parent.h - 6 };
+		SDL_Rect dstT1 = { parent.x + rel + 1, parent.y + 4, thumbSize, parent.h - 6 };
+
+		SDL_SetRenderDrawColor(m_renderer, track[0], track[1], track[2], track[3]);
+		SDL_RenderFillRect(m_renderer, &dst);
+
+		SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+		SDL_RenderDrawRect(m_renderer, &dst);
+
+		auto vTxt = format(fmt, *v);
+		text(parent.w / 2 - textWidth(vTxt) / 2, parent.h / 2 - 8, vTxt, Overflow::OverfowNone, tex.hex());
+
+		SDL_SetRenderDrawColor(m_renderer, 0, 0, 0, 120);
+		SDL_RenderFillRect(m_renderer, &dstT1);
+
+		if (m_state.hoveredItem == id) {
+			if (m_state.activeItem == id) {
+				SDL_SetRenderDrawColor(m_renderer, active[0], active[1], active[2], active[3]);
+				SDL_RenderFillRect(m_renderer, &dstT1);
+				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+				SDL_RenderDrawRect(m_renderer, &dstT1);
+			} else {
+				SDL_SetRenderDrawColor(m_renderer, hover[0], hover[1], hover[2], hover[3]);
+				SDL_RenderFillRect(m_renderer, &dstT);
+				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+				SDL_RenderDrawRect(m_renderer, &dstT);
+			}
+		} else {
+			SDL_SetRenderDrawColor(m_renderer, base[0], base[1], base[2], base[3]);
+			SDL_RenderFillRect(m_renderer, &dstT);
+			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+			SDL_RenderDrawRect(m_renderer, &dstT);
+		}
+
+		if (m_state.activeItem == id) {
+			int mousePos = (m_state.mouseX - (parent.x + thumbSize / 2));
+			if (mousePos < 0) mousePos = 0;
+			if (mousePos > width) mousePos = width;
+			float rat = float(mousePos) / float(width);
+			*v = rat * maxVal + vmin;
+			return true;
+		}
+		return false;
 	}
 
 	inline std::string format(const std::string& fmt, ...) {
@@ -1553,20 +1633,28 @@ int main(int argc, char** argv) {
 			else gui.processEvent(evt);
 		}
 
-		gui.clearScreen(0x002060FF);
+		static Color bg(0x0);
+		gui.clearScreen(bg.hex());
 
 		gui.pushContainer(10, 10, 240, 300);
 			gui.pushContainer(0, 0, 0, 64, GUI::DockTop);
 				gui.text(0, 0, "Hello World! This is a simple test.", GUI::OverfowWrap);
 			gui.popContainer();
-			gui.pushLayout(0, 0, 0, 32, GUI::DockTop, 0);
-				gui.button(GEN_ID, "Button 0");
+
+			for (int i = 0; i < 4; i++) {
+				gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+					gui.button(GEN_ID + i, "Button " + std::to_string(i));
+				gui.popLayout();
+			}
+
+			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+				gui.slider(GEN_ID, &bg.r, 0.0f, 1.0f, "R: %.2f");
 			gui.popLayout();
-			gui.pushLayout(0, 0, 0, 32, GUI::DockTop, 0);
-				gui.button(GEN_ID, "Button 1");
+			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+				gui.slider(GEN_ID, &bg.g, 0.0f, 1.0f, "G: %.2f");
 			gui.popLayout();
-			gui.pushLayout(0, 0, 0, 32, GUI::DockTop, 0);
-				gui.button(GEN_ID, "Button 2");
+			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+				gui.slider(GEN_ID, &bg.b, 0.0f, 1.0f, "B: %.2f");
 			gui.popLayout();
 		gui.popContainer();
 
