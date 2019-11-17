@@ -1207,6 +1207,7 @@ public:
 
 		// Style
 		m_themeColors["base"] = Color(0x555555FF);
+		m_themeColors["accent"] = Color(0xF05522FF);
 		m_themeColors["text"] = Color(0xFFFFFFFF);
 		m_themeParams["containerPadding"] = 4;
 		m_themeParams["containerGap"] = 4;
@@ -1224,6 +1225,12 @@ public:
 				break;
 			case SDL_MOUSEBUTTONDOWN: m_state.mouseDown = event.button.button == 1; break;
 			case SDL_MOUSEBUTTONUP:	m_state.mouseDown = false; break;
+			case SDL_KEYDOWN:
+				m_state.key = event.key.keysym.sym;
+				m_state.mod = event.key.keysym.mod;
+				break;
+			case SDL_TEXTINPUT:
+				m_state.chr = event.text.text[0];
 				break;
 		}
 	}
@@ -1362,12 +1369,12 @@ public:
 		return rec;
 	}
 
-	inline int chr(int x, int y, char c, int color = -1) {
+	inline int chr(int x, int y, char c, int color = -2) {
 		c = c & 0x7F;
 		if (c < ' ') c = 0;
 		else 		 c -= ' ';
 
-		const Color fg = color < 0 ? m_themeColors["text"] : Color(color);
+		const Color fg = color < -1 ? m_themeColors["text"] : Color(color);
 		const Color sh = Color(0x000000FF);
 
 		SDL_SetTextureBlendMode(m_font, SDL_BLENDMODE_BLEND);
@@ -1404,7 +1411,7 @@ public:
 		return spl.size() * 16;
 	}
 
-	inline void text(int x, int y, const std::string& txt, Overflow overflow = Overflow::OverfowNone, int color = -1) {
+	inline void text(int x, int y, const std::string& txt, Overflow overflow = Overflow::OverfowNone, int color = -2) {
 		auto spl = tokenize(txt, ' ');
 		Rect parent = parentRect();
 
@@ -1422,10 +1429,8 @@ public:
 			}
 
 			for (char c : w) {
-				if (c == ' ') {
-					tx += 8;
-				} else if (c == '\t') {
-					tx += 32;
+				if (c == '\t') {
+					tx += 24;
 				} else if (c == '\n') {
 					ty += 16;
 					tx = parent.x + x;
@@ -1439,14 +1444,7 @@ public:
 	}
 
 	inline bool button(int id, const std::string& text) {
-		Rect btn = parentRect();
-
-		if (btn.hit(m_state.mouseX, m_state.mouseY)) {
-			m_state.hoveredItem = id;
-			if (m_state.activeItem == 0 && m_state.mouseDown) {
-				m_state.activeItem = id;
-			}
-		}
+		Rect btn = widget(id);
 
 		const Color base = m_themeColors["base"].bright(0.9f);
 		const Color hover = m_themeColors["base"].bright(1.2f);
@@ -1485,13 +1483,7 @@ public:
 	}
 
 	inline bool slider(int id, float* v, float vmin = 0.0f, float vmax = 1.0f, const std::string& fmt = "%.3f") {
-		Rect parent = parentRect();
-		if (parent.hit(m_state.mouseX, m_state.mouseY)) {
-			m_state.hoveredItem = id;
-			if (m_state.activeItem == 0 && m_state.mouseDown) {
-				m_state.activeItem = id;
-			}
-		}
+		Rect parent = widget(id);
 
 		const int thumbSize = 16;
 		const int width = parent.w - (thumbSize + 6);
@@ -1557,6 +1549,84 @@ public:
 		return false;
 	}
 
+	inline bool edit(int id, std::string& text, int pad = 3, int color = -2) {
+		Rect parent = widget(id);
+
+		const Color bg = m_themeColors["base"].bright(0.7f);
+		const Color bg1 = m_themeColors["base"].bright(0.9f);
+		const Color fg = m_themeColors["base"].bright(2.0f);
+
+		SDL_Rect dst = { parent.x, parent.y, parent.w , parent.h };
+		
+		if (m_state.activeItem == id && m_state.hoveredItem == id) {
+			SDL_SetRenderDrawColor(m_renderer, bg1[0], bg1[1], bg1[2], bg1[3]);
+		} else {
+			SDL_SetRenderDrawColor(m_renderer, bg[0], bg[1], bg[2], bg[3]);
+		}
+		SDL_RenderFillRect(m_renderer, &dst);
+		SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+		SDL_RenderDrawRect(m_renderer, &dst);
+
+		SDL_Rect dstC = { parent.x + pad, parent.y + 1, parent.w - pad * 2, parent.h - 2 };
+		SDL_RenderSetClipRect(m_renderer, &dstC);
+
+		// Draw text
+		int caret = parent.x + pad + m_state.cursor * 8 - 4;
+		int threshold = (parent.x + parent.w - (12 + pad));
+		int offset = caret >= parent.x + threshold ? caret - threshold : 0;
+
+		int x = parent.x + pad - offset, y = parent.y + parent.h / 2 - 8;
+		for (size_t i = 0; i <= text.size(); i++) {
+			Rect cb(x - 4, parent.y, 8, parent.h, 0);
+			if (i == text.size()) cb.w = parent.w + offset;
+
+			if (m_state.activeItem == id && m_state.hoveredItem == id && cb.hit(m_state.mouseX, m_state.mouseY)) {
+				m_state.cursor = i;
+			}
+
+			if (i == text.size()) continue;
+
+			char c = text[i];
+			if (c == ' ') x += 8;
+			else if (c == '\t') x += 32;
+			else if (c == '\n') continue;
+			else x = chr(x, y, c, color);
+		}
+
+		if (m_state.focused == id && (SDL_GetTicks() >> 8) & 1) {
+			chr(caret - offset, y, '|', color);
+		}
+
+		SDL_RenderSetClipRect(m_renderer, nullptr);
+
+		bool changed = false;
+		if (m_state.focused == id) {
+			switch (m_state.key) {
+				case SDLK_BACKSPACE: {
+					if (m_state.cursor > 0) {
+						text.erase(text.begin() + (--m_state.cursor));
+					}
+				} break;
+				case SDLK_DELETE: {
+					int len = text.size() - m_state.cursor;
+					if (len > 0) {
+						text.erase(text.begin() + m_state.cursor);
+					}
+				} break;
+				case SDLK_HOME: m_state.cursor = 0; break;
+				case SDLK_END: m_state.cursor = text.size(); break;
+				case SDLK_LEFT: if (m_state.cursor > 0) m_state.cursor--; break;
+				case SDLK_RIGHT: if (m_state.cursor < text.size()) m_state.cursor++; break;
+			}
+			if (m_state.chr >= 32 && m_state.chr <= 127) {
+				text.insert(text.begin() + m_state.cursor, m_state.chr);
+				m_state.cursor++;
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
 	inline std::string format(const std::string& fmt, ...) {
 		int size = ((int)fmt.size()) * 2 + 50;
 		std::string str;
@@ -1583,6 +1653,9 @@ public:
 			if (m_state.activeItem == 0) m_state.activeItem = -1;
 		}
 		SDL_RenderPresent(m_renderer);
+
+		m_state.key = 0;
+		m_state.chr = 0;
 	}
 
 private:
@@ -1600,10 +1673,15 @@ private:
 		int mouseX, mouseY;
 		int activeItem{ 0 }, hoveredItem{ 0 };
 		bool mouseDown{ false };
+
+		int focused{ 0 }, key{ 0 }, mod{ 0 };
+		char chr{ 0 };
+
+		int cursor{ 0 };
 	} m_state;
 
 	// Utils
-	std::vector<std::string> tokenize(const std::string& str, char delim)  {
+	inline std::vector<std::string> tokenize(const std::string& str, char delim)  {
 		std::vector<std::string> tokens;
 		std::stringstream   ss(str);
 		std::string         temp;
@@ -1611,6 +1689,26 @@ private:
 			tokens.push_back(temp);
 		}
 		return tokens;
+	}
+
+	inline Rect widget(int id) {
+		Rect parent = parentRect();
+		if (parent.hit(m_state.mouseX, m_state.mouseY)) {
+			m_state.hoveredItem = id;
+			if (m_state.activeItem == 0 && m_state.mouseDown) {
+				m_state.activeItem = id;
+			}
+		}
+
+		if (m_state.activeItem == id && m_state.hoveredItem == id && m_state.focused == 0) {
+			m_state.cursor = 0;
+			m_state.focused = id;
+		} else if (m_state.activeItem == id && m_state.hoveredItem == id && m_state.focused != id) {
+			m_state.cursor = 0;
+			m_state.focused = id;
+		}
+
+		return parent;
 	}
 };
 
@@ -1655,6 +1753,11 @@ int main(int argc, char** argv) {
 			gui.popLayout();
 			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
 				gui.slider(GEN_ID, &bg.b, 0.0f, 1.0f, "B: %.2f");
+			gui.popLayout();
+
+			static std::string txt = "Hello Edit!";
+			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+				gui.edit(GEN_ID, txt);
 			gui.popLayout();
 		gui.popContainer();
 
