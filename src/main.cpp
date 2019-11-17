@@ -1549,7 +1549,7 @@ public:
 		return false;
 	}
 
-	inline bool edit(int id, std::string& text, int pad = 3, int color = -2) {
+	inline bool edit(int id, std::string& text, bool obscure = false, int pad = 3, int color = -2) {
 		Rect parent = widget(id);
 
 		const Color bg = m_themeColors["base"].bright(0.7f);
@@ -1571,9 +1571,9 @@ public:
 		SDL_RenderSetClipRect(m_renderer, &dstC);
 
 		// Draw text
-		int caret = parent.x + pad + m_state.cursor * 8 - 4;
-		int threshold = (parent.x + parent.w - (12 + pad));
-		int offset = caret >= parent.x + threshold ? caret - threshold : 0;
+		int caret = pad + m_state.cursor * 8 - 3;
+		int threshold = parent.w - (12 + pad);
+		int offset = caret > threshold ? caret - threshold : 0;
 
 		int x = parent.x + pad - offset, y = parent.y + parent.h / 2 - 8;
 		for (size_t i = 0; i <= text.size(); i++) {
@@ -1590,11 +1590,11 @@ public:
 			if (c == ' ') x += 8;
 			else if (c == '\t') x += 32;
 			else if (c == '\n') continue;
-			else x = chr(x, y, c, color);
+			else x = chr(x, y, obscure ? '*' : c, color);
 		}
 
 		if (m_state.focused == id && (SDL_GetTicks() >> 8) & 1) {
-			chr(caret - offset, y, '|', color);
+			chr(parent.x + caret - offset, y, '|', color);
 		}
 
 		SDL_RenderSetClipRect(m_renderer, nullptr);
@@ -1734,7 +1734,7 @@ int main(int argc, char** argv) {
 		static Color bg(0x0);
 		gui.clearScreen(bg.hex());
 
-		gui.pushContainer(10, 10, 240, 300);
+		gui.pushContainer(10, 10, 240, 400);
 			gui.pushContainer(0, 0, 0, 64, GUI::DockTop);
 				gui.text(0, 0, "Hello World! This is a simple test.", GUI::OverfowWrap);
 			gui.popContainer();
@@ -1755,9 +1755,24 @@ int main(int argc, char** argv) {
 				gui.slider(GEN_ID, &bg.b, 0.0f, 1.0f, "B: %.2f");
 			gui.popLayout();
 
-			static std::string txt = "Hello Edit!";
-			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
-				gui.edit(GEN_ID, txt);
+			static std::string user = "";
+			static std::string pass = "";
+			gui.pushLayout(0, 0, 0, 20, GUI::DockTop, 0);
+				gui.pushLayout(0, 0, 64, 0, GUI::DockLeft, 0);
+					gui.text(0, 0, "User");
+				gui.popLayout();
+				gui.pushLayout(0, 0, 0, 0, GUI::DockFill, 0);
+					gui.edit(GEN_ID, user);
+				gui.popLayout();
+			gui.popLayout();
+
+			gui.pushLayout(0, 0, 0, 20, GUI::DockTop, 0);
+				gui.pushLayout(0, 0, 64, 0, GUI::DockLeft, 0);
+					gui.text(0, 0, "Password");
+				gui.popLayout();
+				gui.pushLayout(0, 0, 0, 0, GUI::DockFill, 0);
+					gui.edit(GEN_ID, pass, true);
+				gui.popLayout();
 			gui.popLayout();
 		gui.popContainer();
 
