@@ -1163,6 +1163,15 @@ struct Color {
 		return col;
 	}
 
+	inline Color inverted() const {
+		Color col;
+		col.r = 1.0f - r;
+		col.g = 1.0f - g;
+		col.b = 1.0f - b;
+		col.a = a;
+		return col;
+	}
+
 	inline int hex() const {
 		return ((*this)[0] & 0xFF) << 24 |
 				((*this)[1] & 0xFF) << 16 |
@@ -1670,67 +1679,43 @@ public:
 		return false;
 	}
 
-	inline bool dropdown(int id, int* selected, const std::vector<std::string>& items, int color = -2) {
-		const int buttonSize = 16;
+	inline bool list(int id, int* selected, const std::vector<std::string>& items) {
 		Rect parent = widget(id);
 
+		const Color sel = m_themeColors["text"].inverted();
 		const Color base = m_themeColors["base"].bright(0.9f);
-		const Color hover = m_themeColors["base"].bright(1.2f);
 		const Color bg = m_themeColors["base"].bright(0.5f);
-		const Color active = m_themeColors["base"].bright(0.6f);
 		const Color fg = m_themeColors["base"].bright(2.0f);
 
 		SDL_Rect dst = { parent.x, parent.y, parent.w , parent.h };
-		SDL_Rect dst1 = { parent.x+1, parent.y+1, parent.w , parent.h };
-		SDL_Rect dst2 = { parent.x, parent.y + parent.h, parent.w, parent.h * 5 };
-
-		SDL_Rect btn = { parent.x + parent.w - (buttonSize + 3), parent.y + 3, buttonSize, parent.h - 6 };
-		SDL_Rect btn1 = { parent.x + parent.w - (buttonSize + 3) + 1, parent.y + 4, buttonSize, parent.h - 6 };
 
 		SDL_SetRenderDrawColor(m_renderer, bg[0], bg[1], bg[2], bg[3]);
 		SDL_RenderFillRect(m_renderer, &dst);
 		
-		if (m_state.hoveredItem == id) {
-			if (m_state.activeItem == id) {
-				SDL_SetRenderDrawColor(m_renderer, active[0], active[1], active[2], active[3]);
-				SDL_RenderFillRect(m_renderer, &btn1);
-				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
-				SDL_RenderDrawRect(m_renderer, &btn1);
-			} else {
-				SDL_SetRenderDrawColor(m_renderer, hover[0], hover[1], hover[2], hover[3]);
-				SDL_RenderFillRect(m_renderer, &btn);
-				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
-				SDL_RenderDrawRect(m_renderer, &btn);
-			}
-		} else {
-			SDL_SetRenderDrawColor(m_renderer, base[0], base[1], base[2], base[3]);
-			SDL_RenderFillRect(m_renderer, &btn);
-			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
-			SDL_RenderDrawRect(m_renderer, &btn);
-		}
-		chr(parent.x + parent.w - buttonSize + 1, parent.y + parent.h / 2 - 8, '\x7F');
-
-		SDL_Rect clip = { parent.x, parent.y, parent.w - (buttonSize + 6), parent.h };
+		SDL_Rect clip = { parent.x + 1, parent.y + 1, parent.w - 2, parent.h - 2 };
 
 		SDL_RenderSetClipRect(m_renderer, &clip);
-		pushLayout(0, 0, parent.w - (buttonSize + 6), parent.h);
-			this->text(3, parent.h / 2 - 8, items[*selected], Overflow::OverfowEllipses, color);
-		popLayout();
-		SDL_RenderSetClipRect(m_renderer, nullptr);
+		int y = 3;
+		for (int i = 0; i < items.size(); i++) {
+			auto it = items[i];
+			Rect ir(parent.x + 3, parent.y + y, parent.w - 6, 16, 0);
+			if (m_state.mouseDown && m_state.hoveredItem == id && m_state.activeItem == id) {
+				if (ir.hit(m_state.mouseX, m_state.mouseY)) *selected = i;
+			}
 
-		if (m_state.mouseDown && m_state.hoveredItem == id && m_state.activeItem == id) {
-			m_state.open = m_state.open == -1 ? id : -1;
+			if (*selected == i) {
+				SDL_Rect selRect = { ir.x, ir.y, ir.w, ir.h };
+				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+				SDL_RenderFillRect(m_renderer, &selRect);
+			}
+			text(3, y, it, Overflow::OverfowEllipses, *selected == i ? sel.hex() : -2);
+			y += textHeight(it);
+			drawLine(parent.x, parent.y + y, parent.x + parent.w, parent.y + y, base.hex());
 		}
+		SDL_RenderSetClipRect(m_renderer, nullptr);
 
 		SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
 		SDL_RenderDrawRect(m_renderer, &dst);
-
-		if (m_state.open == id) {
-			SDL_SetRenderDrawColor(m_renderer, bg[0], bg[1], bg[2], bg[3]);
-			SDL_RenderFillRect(m_renderer, &dst2);
-			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
-			SDL_RenderDrawRect(m_renderer, &dst2);
-		}
 
 		return false;
 	}
@@ -1782,7 +1767,7 @@ private:
 		int activeItem{ 0 }, hoveredItem{ 0 };
 		bool mouseDown{ false };
 
-		int focused{ 0 }, key{ 0 }, mod{ 0 }, open{ -1 };
+		int focused{ 0 }, key{ 0 }, mod{ 0 };
 		char chr{ 0 };
 
 		int cursor{ 0 };
@@ -1883,8 +1868,8 @@ int main(int argc, char** argv) {
 			gui.popLayout();
 
 			static int sel = 1;
-			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
-				gui.dropdown(GEN_ID, &sel, { "Apples", "Oranges", "Grapes" });
+			gui.pushLayout(0, 0, 0, 100, GUI::DockTop, 0);
+				gui.list(GEN_ID, &sel, { "Apples", "Oranges", "Grapes" });
 			gui.popLayout();
 		gui.popContainer();
 
