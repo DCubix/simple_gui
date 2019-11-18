@@ -1443,7 +1443,7 @@ public:
 		}
 	}
 
-	inline bool button(int id, const std::string& text) {
+	inline bool button(int id, const std::string& text, int color = -2) {
 		Rect btn = widget(id);
 
 		const Color base = m_themeColors["base"].bright(0.9f);
@@ -1477,7 +1477,7 @@ public:
 			SDL_RenderDrawRect(m_renderer, &dst);
 
 		}
-		this->text(btn.w / 2 - tw / 2, btn.h / 2 - th / 2, text);
+		this->text(btn.w / 2 - tw / 2, btn.h / 2 - th / 2, text, GUI::OverfowNone, color);
 
 		return m_state.mouseDown && m_state.hoveredItem == id && m_state.activeItem == id;
 	}
@@ -1627,6 +1627,114 @@ public:
 		return changed;
 	}
 
+	inline bool toggle(int id, const std::string& text, bool* v, int color = -2) {
+		Rect btn = widget(id);
+
+		const Color base = m_themeColors["base"].bright(0.9f);
+		const Color hover = m_themeColors["base"].bright(1.2f);
+		const Color active = m_themeColors["base"].bright(0.6f);
+		const Color fg = m_themeColors["base"].bright(2.0f);
+
+		SDL_Rect dst = { btn.x, btn.y, btn.w , btn.h };
+		SDL_Rect dst1 = { btn.x+1, btn.y+1, btn.w , btn.h };
+
+		const int tw = textWidth(text);
+		const int th = textHeight(text);
+
+		if (*v || m_state.activeItem == id) {
+			SDL_SetRenderDrawColor(m_renderer, active[0], active[1], active[2], active[3]);
+			SDL_RenderFillRect(m_renderer, &dst1);
+			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+			SDL_RenderDrawRect(m_renderer, &dst1);
+		} else {
+			SDL_SetRenderDrawColor(m_renderer, base[0], base[1], base[2], base[3]);
+			SDL_RenderFillRect(m_renderer, &dst);
+			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+			SDL_RenderDrawRect(m_renderer, &dst);
+			if (m_state.hoveredItem == id) {
+				SDL_SetRenderDrawColor(m_renderer, hover[0], hover[1], hover[2], hover[3]);
+				SDL_RenderFillRect(m_renderer, &dst);
+				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+				SDL_RenderDrawRect(m_renderer, &dst);
+			}
+		}
+
+		this->text(btn.w / 2 - tw / 2, btn.h / 2 - th / 2, text, GUI::OverfowNone, color);
+
+		if (m_state.mouseDown && m_state.hoveredItem == id && m_state.activeItem == id) {
+			*v = !(*v);
+			m_state.hoveredItem = 0;
+			m_state.activeItem = -1;
+			return true;
+		}
+		return false;
+	}
+
+	inline bool dropdown(int id, int* selected, const std::vector<std::string>& items, int color = -2) {
+		const int buttonSize = 16;
+		Rect parent = widget(id);
+
+		const Color base = m_themeColors["base"].bright(0.9f);
+		const Color hover = m_themeColors["base"].bright(1.2f);
+		const Color bg = m_themeColors["base"].bright(0.5f);
+		const Color active = m_themeColors["base"].bright(0.6f);
+		const Color fg = m_themeColors["base"].bright(2.0f);
+
+		SDL_Rect dst = { parent.x, parent.y, parent.w , parent.h };
+		SDL_Rect dst1 = { parent.x+1, parent.y+1, parent.w , parent.h };
+		SDL_Rect dst2 = { parent.x, parent.y + parent.h, parent.w, parent.h * 5 };
+
+		SDL_Rect btn = { parent.x + parent.w - (buttonSize + 3), parent.y + 3, buttonSize, parent.h - 6 };
+		SDL_Rect btn1 = { parent.x + parent.w - (buttonSize + 3) + 1, parent.y + 4, buttonSize, parent.h - 6 };
+
+		SDL_SetRenderDrawColor(m_renderer, bg[0], bg[1], bg[2], bg[3]);
+		SDL_RenderFillRect(m_renderer, &dst);
+		
+		if (m_state.hoveredItem == id) {
+			if (m_state.activeItem == id) {
+				SDL_SetRenderDrawColor(m_renderer, active[0], active[1], active[2], active[3]);
+				SDL_RenderFillRect(m_renderer, &btn1);
+				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+				SDL_RenderDrawRect(m_renderer, &btn1);
+			} else {
+				SDL_SetRenderDrawColor(m_renderer, hover[0], hover[1], hover[2], hover[3]);
+				SDL_RenderFillRect(m_renderer, &btn);
+				SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+				SDL_RenderDrawRect(m_renderer, &btn);
+			}
+		} else {
+			SDL_SetRenderDrawColor(m_renderer, base[0], base[1], base[2], base[3]);
+			SDL_RenderFillRect(m_renderer, &btn);
+			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+			SDL_RenderDrawRect(m_renderer, &btn);
+		}
+		chr(parent.x + parent.w - buttonSize + 1, parent.y + parent.h / 2 - 8, '\x7F');
+
+		SDL_Rect clip = { parent.x, parent.y, parent.w - (buttonSize + 6), parent.h };
+
+		SDL_RenderSetClipRect(m_renderer, &clip);
+		pushLayout(0, 0, parent.w - (buttonSize + 6), parent.h);
+			this->text(3, parent.h / 2 - 8, items[*selected], Overflow::OverfowEllipses, color);
+		popLayout();
+		SDL_RenderSetClipRect(m_renderer, nullptr);
+
+		if (m_state.mouseDown && m_state.hoveredItem == id && m_state.activeItem == id) {
+			m_state.open = m_state.open == -1 ? id : -1;
+		}
+
+		SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+		SDL_RenderDrawRect(m_renderer, &dst);
+
+		if (m_state.open == id) {
+			SDL_SetRenderDrawColor(m_renderer, bg[0], bg[1], bg[2], bg[3]);
+			SDL_RenderFillRect(m_renderer, &dst2);
+			SDL_SetRenderDrawColor(m_renderer, fg[0], fg[1], fg[2], fg[3]);
+			SDL_RenderDrawRect(m_renderer, &dst2);
+		}
+
+		return false;
+	}
+
 	inline std::string format(const std::string& fmt, ...) {
 		int size = ((int)fmt.size()) * 2 + 50;
 		std::string str;
@@ -1674,7 +1782,7 @@ private:
 		int activeItem{ 0 }, hoveredItem{ 0 };
 		bool mouseDown{ false };
 
-		int focused{ 0 }, key{ 0 }, mod{ 0 };
+		int focused{ 0 }, key{ 0 }, mod{ 0 }, open{ -1 };
 		char chr{ 0 };
 
 		int cursor{ 0 };
@@ -1739,12 +1847,6 @@ int main(int argc, char** argv) {
 				gui.text(0, 0, "Hello World! This is a simple test.", GUI::OverfowWrap);
 			gui.popContainer();
 
-			for (int i = 0; i < 4; i++) {
-				gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
-					gui.button(GEN_ID + i, "Button " + std::to_string(i));
-				gui.popLayout();
-			}
-
 			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
 				gui.slider(GEN_ID, &bg.r, 0.0f, 1.0f, "R: %.2f");
 			gui.popLayout();
@@ -1773,6 +1875,16 @@ int main(int argc, char** argv) {
 				gui.pushLayout(0, 0, 0, 0, GUI::DockFill, 0);
 					gui.edit(GEN_ID, pass, true);
 				gui.popLayout();
+			gui.popLayout();
+
+			static bool tggl = false;
+			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+				gui.toggle(GEN_ID, "Toggle", &tggl);
+			gui.popLayout();
+
+			static int sel = 1;
+			gui.pushLayout(0, 0, 0, 22, GUI::DockTop, 0);
+				gui.dropdown(GEN_ID, &sel, { "Apples", "Oranges", "Grapes" });
 			gui.popLayout();
 		gui.popContainer();
 
