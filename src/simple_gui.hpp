@@ -1690,8 +1690,6 @@ namespace sgui {
 				chr(parent.x + caret - offset, y, '|', color);
 			}
 
-			m_renderer->unclip();
-
 			bool changed = false;
 			if (m_state.focusedItem == id) {
 				int& cursor = m_state.text.cursor;
@@ -1776,6 +1774,9 @@ namespace sgui {
 					}
 				}
 			}
+			
+			m_renderer->unclip();
+
 			return changed;
 		}
 
