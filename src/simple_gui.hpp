@@ -1127,11 +1127,13 @@ unsigned char font_bmp[] = {
 };
 unsigned int font_bmp_len = 13434;
 
+#include <iostream>
 #include <map>
 #include <string>
 #include <algorithm>
 #include <vector>
 #include <array>
+#include <stack>
 #include <cstdarg>
 #include <sstream>
 #include <memory>
@@ -1173,6 +1175,15 @@ namespace sgui {
 			col.g = std::max(std::min(g * v, 1.0f), 0.0f);
 			col.b = std::max(std::min(b * v, 1.0f), 0.0f);
 			col.a = a;
+			return col;
+		}
+
+		inline Color alpha(float v) const {
+			Color col;
+			col.r = r;
+			col.g = g;
+			col.b = b;
+			col.a = v;
 			return col;
 		}
 
@@ -1279,6 +1290,7 @@ namespace sgui {
 	};
 
 	struct Widget {
+		bool justFocused, clickedOut;
 		WidgetState state{ WidgetState::StateNormal };
 		Rect parent;
 	};
@@ -1308,40 +1320,12 @@ namespace sgui {
 				rect.h = -rect.h;
 				rect.y -= rect.h;
 			}
-
-			if (m_clips.empty()) {
-				if (rect.w < 1 || rect.h < 1) return;
-			} else {
-				// Merge
-				Rect parent = m_clips.back();
-				float minX = std::max(parent.x, rect.x);
-				float maxX = std::min(parent.x + parent.w, rect.x + rect.w);
-				if (maxX - minX < 1) return;
-
-				float minY = std::max(parent.y, rect.y);
-				float maxY = std::min(parent.y + parent.h, rect.y + rect.h);
-				if (maxY - minY < 1) return;
-
-				rect.x = minX;
-				rect.y = minY;
-				rect.w = int(maxX - minX);
-				rect.h = int(std::max(1.0f, maxY - minY));
-			}
-			m_clips.push_back(rect);
 			setClipRect(rect);
 		}
 
 		inline void unclip() {
-			if (!m_clips.empty()) m_clips.pop_back();
-			if (m_clips.empty()) {
-				//unsetClipRect();
-			} else {
-				setClipRect(m_clips.back());
-			}
+			unsetClipRect();
 		}
-
-	private:
-		std::vector<Rect> m_clips;
 	};
 
 	enum Key {
@@ -1501,6 +1485,7 @@ namespace sgui {
 		inline void pushContainer(int x, int y, int w, int h, Dock dock = Dock::DockNone, int pad = -1, int gap = -1) {
 			LayoutRegion reg = pushLayout(x, y, w, h, dock, pad, gap);
 			m_renderer->rect(reg.area, Color(m_style[StyleProperty::PropPrimaryColor]), true);
+			m_renderer->rect(reg.area, Color(m_style[StyleProperty::PropPrimaryColor]).bright(2.0f));
 			m_renderer->clip(reg.asRect());
 		}
 
@@ -1683,7 +1668,7 @@ namespace sgui {
 				Rect cb(x - 4, parent.y, 8, parent.h);
 				if (i == text.size()) cb.w = parent.w + offset;
 
-				if (w.state == WidgetState::StatePressed && cb.contains(mp)) {
+				if (w.state == WidgetState::StateActive && cb.contains(mp)) {
 					m_state.text.cursor = i;
 				}
 
@@ -1705,27 +1690,83 @@ namespace sgui {
 			bool changed = false;
 			if (m_state.focusedItem == id) {
 				int& cursor = m_state.text.cursor;
+				
+				if (m_input->isMouseButtonPressed(1)) {
+					m_state.text.selectionStart = m_state.text.cursor;
+				}
+
+				if (m_state.text.selectionStart != -1) {
+					int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+					if (selStart > selEnd) std::swap(selStart, selEnd);
+
+					const int selLength = selEnd - selStart;
+
+					if (selLength > 0) {
+						const int relX = (parent.x + pad - offset);
+						int fromX = relX + selStart * 8;
+						int boxW = selLength * 8;
+						m_renderer->rect(Rect(fromX, parent.y + parent.h / 2 - 8, boxW, 16), Color(m_style[StyleProperty::PropAccentColor]).alpha(0.5f), true);
+					}
+				}
+
+				if (w.justFocused) {
+					m_state.text.selectionStart = -1;
+					m_state.text.cursor = 0;
+				}
+
+				
 				if (m_input->isKeyPressed(Key::KeyBackspace)) {
-					if (cursor > 0) {
-						text.erase(text.begin() + (--cursor));
+					if (m_state.text.selectionStart != -1) {
+						int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+						if (selStart > selEnd) std::swap(selStart, selEnd);
+						text.erase(text.begin() + selStart, text.begin() + selEnd);
 						changed = true;
+						cursor = selStart;
+						m_state.text.selectionStart = -1;
+					} else {
+						if (cursor > 0) {
+							text.erase(text.begin() + (--cursor));
+							changed = true;
+						}
 					}
 				} else if (m_input->isKeyPressed(Key::KeyDelete)) {
-					int len = text.size() - cursor;
-					if (len > 0) {
-						text.erase(text.begin() + cursor);
+					if (m_state.text.selectionStart != -1) {
+						int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+						if (selStart > selEnd) std::swap(selStart, selEnd);
+						text.erase(text.begin() + selStart, text.begin() + selEnd);
 						changed = true;
+						cursor = selStart;
+						m_state.text.selectionStart = -1;
+					} else {
+						int len = text.size() - cursor;
+						if (len > 0) {
+							text.erase(text.begin() + cursor);
+							changed = true;
+						}
 					}
 				} else if (m_input->isKeyPressed(Key::KeyHome)) {
+					m_state.text.selectionStart = -1;
 					cursor = 0;
 				} else if (m_input->isKeyPressed(Key::KeyEnd)) {
+					m_state.text.selectionStart = -1;
 					cursor = text.size();
 				} else if (m_input->isKeyPressed(Key::KeyLeft)) {
+					m_state.text.selectionStart = -1;
 					if (cursor > 0) cursor--;
 				} else if (m_input->isKeyPressed(Key::KeyRight)) {
+					m_state.text.selectionStart = -1;
 					if (cursor < text.size()) cursor++;
 				} else {
 					if (m_input->typedChar() >= 32 && m_input->typedChar() <= 127) {
+						if (m_state.text.selectionStart != -1) {
+							int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+							if (selStart > selEnd) std::swap(selStart, selEnd);
+							text.erase(text.begin() + selStart, text.begin() + selEnd);
+							changed = true;
+							cursor = selStart;
+							m_state.text.selectionStart = -1;
+						}
+
 						text.insert(text.begin() + cursor, m_input->typedChar());
 						cursor++;
 						changed = true;
@@ -1838,11 +1879,14 @@ namespace sgui {
 		inline InputManager* input() { return m_input.get(); }
 		inline Renderer* renderer() { return m_renderer.get(); }
 
-		inline void finish() { m_input->clear(); }
+		inline void finish() {
+			m_input->clear();
+			m_renderer->unclip();
+		}
 
 	protected:
 		struct TextBoxState {
-			int cursor{ 0 }, selectionStart{ -1 }, selectionEnd{ -1 };
+			int cursor{ 0 }, selectionStart{ -1 };
 		};
 
 		struct {
@@ -1875,6 +1919,8 @@ namespace sgui {
 			Widget wg;
 			wg.state = m_state.state;
 			wg.parent = parent;
+			wg.justFocused = false;
+			wg.clickedOut = false;
 			
 			if (parent.contains(m_input->mousePosition())) {
 				if (m_input->isMouseButtonDown(1)) {
@@ -1886,11 +1932,13 @@ namespace sgui {
 				if (m_input->isMouseButtonReleased(1)) wg.state = WidgetState::StatePressed;
 			} else {
 				wg.state = WidgetState::StateNormal;
+				if (m_input->isMouseButtonPressed(1)) wg.clickedOut = true;
 			}
 
 			if (wg.state == WidgetState::StateActive && m_state.focusedItem != id) {
 				m_state.text.cursor = 0;
 				m_state.focusedItem = id;
+				wg.justFocused = true;
 			}
 
 			return wg;
