@@ -1717,24 +1717,49 @@ namespace sgui {
 					m_state.text.cursor = 0;
 				}
 
-				if (m_input->isKeyDown(Key::KeyCtrl) && m_input->isKeyPressed(Key::KeyC) && m_state.text.selectionStart != -1) {
-					int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
-					if (selStart > selEnd) std::swap(selStart, selEnd);
-					m_input->setClipboardText(text.substr(selStart, selEnd - selStart));
-				} else if (m_input->isKeyDown(Key::KeyCtrl) && m_input->isKeyPressed(Key::KeyX) && m_state.text.selectionStart != -1) {
-					int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
-					if (selStart > selEnd) std::swap(selStart, selEnd);
-					m_input->setClipboardText(text.substr(selStart, selEnd - selStart));
-					changed = clearTextSelection(text);
-				} else if (m_input->isKeyDown(Key::KeyCtrl) && m_input->isKeyPressed(Key::KeyV) && m_state.text.selectionStart != -1) {
-					changed = clearTextSelection(text);
-					std::string txt = m_input->getClipboardText();
-					for (char c : txt) {
-						text.insert(text.begin() + cursor, c);
-						cursor++;
+				bool ctrl = false;
+				if (m_input->isKeyDown(Key::KeyCtrl)) {
+					ctrl = true;
+					if (m_state.text.selectionStart != -1) {
+						int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+						if (selStart > selEnd) std::swap(selStart, selEnd);
+						
+						// Handle clipboard
+						if (m_input->isKeyPressed(Key::KeyC)) {
+							m_input->setClipboardText(text.substr(selStart, selEnd - selStart));
+						} else if (m_input->isKeyPressed(Key::KeyX)) {
+							m_input->setClipboardText(text.substr(selStart, selEnd - selStart));
+							changed = clearTextSelection(text);
+						} else if (m_input->isKeyPressed(Key::KeyV)) {
+							changed = clearTextSelection(text);
+							std::string txt = m_input->getClipboardText();
+							for (char c : txt) {
+								text.insert(text.begin() + cursor, c);
+								cursor++;
+							}
+							changed = true;
+						}
+					} else {
+						// Special navigation
+						if (m_input->isKeyPressed(Key::KeyBackspace) && text.size() > 0) {
+							int end = cursor;
+							while (cursor > 0 && text[--cursor] != ' ');
+							text.erase(text.begin() + cursor, text.begin() + end);
+							changed = true;
+						} else if (m_input->isKeyPressed(Key::KeyDelete)) {
+							while (text[cursor] != ' ' && text.size() - cursor > 0) {
+								text.erase(text.begin() + cursor);
+							}
+							if (text.size() - cursor > 0)
+								text.erase(text.begin() + cursor);
+							changed = true;
+						} else if (m_input->isKeyPressed(Key::KeyLeft)) {
+							while (cursor > 0 && text[--cursor] != ' ');
+						} else if (m_input->isKeyPressed(Key::KeyRight)) {
+							while (cursor < text.size() && text[++cursor] != ' ');
+						}
 					}
-					changed = true;
-				} else if (m_input->isKeyPressed(Key::KeyBackspace)) {
+				} else if (m_input->isKeyPressed(Key::KeyBackspace) && !ctrl) {
 					if (m_state.text.selectionStart != -1) {
 						changed = clearTextSelection(text);
 					} else {
@@ -1743,7 +1768,7 @@ namespace sgui {
 							changed = true;
 						}
 					}
-				} else if (m_input->isKeyPressed(Key::KeyDelete)) {
+				} else if (m_input->isKeyPressed(Key::KeyDelete) && !ctrl) {
 					if (m_state.text.selectionStart != -1) {
 						changed = clearTextSelection(text);
 					} else {
@@ -1753,20 +1778,20 @@ namespace sgui {
 							changed = true;
 						}
 					}
-				} else if (m_input->isKeyPressed(Key::KeyHome)) {
+				} else if (m_input->isKeyPressed(Key::KeyHome) && !ctrl) {
 					m_state.text.selectionStart = -1;
 					cursor = 0;
-				} else if (m_input->isKeyPressed(Key::KeyEnd)) {
+				} else if (m_input->isKeyPressed(Key::KeyEnd) && !ctrl) {
 					m_state.text.selectionStart = -1;
 					cursor = text.size();
-				} else if (m_input->isKeyPressed(Key::KeyLeft)) {
+				} else if (m_input->isKeyPressed(Key::KeyLeft) && !ctrl) {
 					m_state.text.selectionStart = -1;
 					if (cursor > 0) cursor--;
-				} else if (m_input->isKeyPressed(Key::KeyRight)) {
+				} else if (m_input->isKeyPressed(Key::KeyRight) && !ctrl) {
 					m_state.text.selectionStart = -1;
 					if (cursor < text.size()) cursor++;
 				} else {
-					if (m_input->typedChar() >= 32 && m_input->typedChar() <= 127) {
+					if (m_input->typedChar() >= 32 && m_input->typedChar() <= 127 && !ctrl) {
 						clearTextSelection(text);
 						text.insert(text.begin() + cursor, m_input->typedChar());
 						cursor++;
