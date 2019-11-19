@@ -1339,6 +1339,9 @@ namespace sgui {
 		KeyLeft,
 		KeyRight,
 		KeyEnter,
+		KeyX,
+		KeyV,
+		KeyC,
 		KeyCount
 	};
 
@@ -1349,9 +1352,11 @@ namespace sgui {
 			bool pressed{ false }, released{ false }, down{ false };
 		};
 
-		inline virtual void init(std::array<int, KeyCount>& keymap) = 0;
-		inline virtual int time() = 0;
-		inline virtual void processEvents(void* udata) = 0;
+		virtual void init(std::array<int, KeyCount>& keymap) = 0;
+		virtual int time() = 0;
+		virtual void processEvents(void* udata) = 0;
+		virtual void setClipboardText(const std::string& text) = 0;
+		virtual std::string getClipboardText() = 0;
 
 		inline Key translateKey(int key) {
 			for (size_t i = 0; i < m_keymap.size(); i++) {
@@ -1714,15 +1719,26 @@ namespace sgui {
 					m_state.text.cursor = 0;
 				}
 
-				
-				if (m_input->isKeyPressed(Key::KeyBackspace)) {
+				if (m_input->isKeyDown(Key::KeyCtrl) && m_input->isKeyPressed(Key::KeyC) && m_state.text.selectionStart != -1) {
+					int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+					if (selStart > selEnd) std::swap(selStart, selEnd);
+					m_input->setClipboardText(text.substr(selStart, selEnd - selStart));
+				} else if (m_input->isKeyDown(Key::KeyCtrl) && m_input->isKeyPressed(Key::KeyX) && m_state.text.selectionStart != -1) {
+					int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+					if (selStart > selEnd) std::swap(selStart, selEnd);
+					m_input->setClipboardText(text.substr(selStart, selEnd - selStart));
+					changed = clearTextSelection(text);
+				} else if (m_input->isKeyDown(Key::KeyCtrl) && m_input->isKeyPressed(Key::KeyV) && m_state.text.selectionStart != -1) {
+					changed = clearTextSelection(text);
+					std::string txt = m_input->getClipboardText();
+					for (char c : txt) {
+						text.insert(text.begin() + cursor, c);
+						cursor++;
+					}
+					changed = true;
+				} else if (m_input->isKeyPressed(Key::KeyBackspace)) {
 					if (m_state.text.selectionStart != -1) {
-						int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
-						if (selStart > selEnd) std::swap(selStart, selEnd);
-						text.erase(text.begin() + selStart, text.begin() + selEnd);
-						changed = true;
-						cursor = selStart;
-						m_state.text.selectionStart = -1;
+						changed = clearTextSelection(text);
 					} else {
 						if (cursor > 0) {
 							text.erase(text.begin() + (--cursor));
@@ -1731,12 +1747,7 @@ namespace sgui {
 					}
 				} else if (m_input->isKeyPressed(Key::KeyDelete)) {
 					if (m_state.text.selectionStart != -1) {
-						int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
-						if (selStart > selEnd) std::swap(selStart, selEnd);
-						text.erase(text.begin() + selStart, text.begin() + selEnd);
-						changed = true;
-						cursor = selStart;
-						m_state.text.selectionStart = -1;
+						changed = clearTextSelection(text);
 					} else {
 						int len = text.size() - cursor;
 						if (len > 0) {
@@ -1758,15 +1769,7 @@ namespace sgui {
 					if (cursor < text.size()) cursor++;
 				} else {
 					if (m_input->typedChar() >= 32 && m_input->typedChar() <= 127) {
-						if (m_state.text.selectionStart != -1) {
-							int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
-							if (selStart > selEnd) std::swap(selStart, selEnd);
-							text.erase(text.begin() + selStart, text.begin() + selEnd);
-							changed = true;
-							cursor = selStart;
-							m_state.text.selectionStart = -1;
-						}
-
+						clearTextSelection(text);
 						text.insert(text.begin() + cursor, m_input->typedChar());
 						cursor++;
 						changed = true;
@@ -1903,6 +1906,18 @@ namespace sgui {
 
 		std::array<int, StylePropCount> m_style;
 		void* m_font;
+
+		inline bool clearTextSelection(std::string& text) {
+			if (m_state.text.selectionStart != -1) {
+				int selStart = m_state.text.selectionStart, selEnd = m_state.text.cursor;
+				if (selStart > selEnd) std::swap(selStart, selEnd);
+				text.erase(text.begin() + selStart, text.begin() + selEnd);
+				m_state.text.cursor = selStart;
+				m_state.text.selectionStart = -1;
+				return true;
+			}
+			return false;
+		}
 
 		inline std::vector<std::string> tokenize(const std::string& str, char delim)  {
 			std::vector<std::string> tokens;

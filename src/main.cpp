@@ -24,6 +24,17 @@ public:
 		keymap[Key::KeyHome] = SDLK_HOME;
 		keymap[Key::KeyLeft] = SDLK_LEFT;
 		keymap[Key::KeyRight] = SDLK_RIGHT;
+		keymap[Key::KeyV] = SDLK_v;
+		keymap[Key::KeyX] = SDLK_x;
+		keymap[Key::KeyC] = SDLK_c;
+	}
+
+	void setClipboardText(const std::string& text) override {
+		SDL_SetClipboardText(text.c_str());
+	}
+
+	std::string getClipboardText() override {
+		return std::string(SDL_GetClipboardText());
 	}
 
 	int time() override {
