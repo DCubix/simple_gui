@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS ON)
 
 add_definitions(-DSDL_MAIN_HANDLED)
 
-file(GLOB_RECURSE SRC "src/*.cpp" "src/*.h" "src/*.hpp")
+file(GLOB_RECURSE SRC "src/*.c" "src/*.cpp" "src/*.h" "src/*.hpp")
 
 find_package(SDL2 CONFIG REQUIRED)
 
