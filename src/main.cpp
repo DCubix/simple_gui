@@ -30,15 +30,16 @@ int main(int argc, char** argv) {
 			else gui.input()->processEvents(&evt);
 		}
 
-		static Color bg(0x0);
-		SDL_SetRenderDrawColor(ren, bg[0], bg[1], bg[2], 255);
-		SDL_RenderClear(ren);
-
 		int w, h;
 		SDL_GetWindowSize(win, &w, &h);
 
 		gui.prepare(w, h);
-		gui.pushContainer(10, 10, 240, 400);
+
+		static Color bg(0x0);
+		SDL_SetRenderDrawColor(ren, bg[0], bg[1], bg[2], 255);
+		SDL_RenderClear(ren);
+
+		gui.pushContainer(10, 10, 240, 470);
 			gui.pushContainer(0, 0, 0, 64, Dock::DockTop);
 				gui.text(0, 0, "Hello World! This is a simple test.", Overflow::OverfowWrap);
 			gui.popContainer();
@@ -79,8 +80,16 @@ int main(int argc, char** argv) {
 			gui.popLayout();
 
 			static int sel = 1;
-			gui.pushLayout(0, 0, 0, 100, Dock::DockTop, 0);
-				gui.list(GEN_ID, &sel, { "Apples", "Oranges", "Grapes" });
+			// gui.pushLayout(0, 0, 0, 60, Dock::DockTop, 0);
+			// 	gui.list(GEN_ID, &sel, { "Apples", "Oranges", "Grapes", "Really freakin' long text that gets hidden" });
+			// gui.popLayout();
+
+			gui.pushLayout(0, 0, 0, 22, Dock::DockTop, 0);
+				gui.dropdown(GEN_ID, &sel, { "Apples", "Oranges", "Grapes", "Really freakin' long text that gets hidden" });
+			gui.popLayout();
+
+			gui.pushLayout(0, 0, 0, 22, Dock::DockTop, 0);
+				gui.button(GEN_ID, "Button");
 			gui.popLayout();
 		gui.popContainer();
 

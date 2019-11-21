@@ -1265,7 +1265,8 @@ namespace sgui {
 				case WidgetState::StateActive: m_renderer->rect(shadow, active, true); m_renderer->rect(shadow, fg); break;
 				case WidgetState::StateHovered: m_renderer->rect(p, hover, true); m_renderer->rect(p, fg); break;
 			}
-			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Overflow::OverfowNone, color);
+
+			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Overflow::OverfowEllipses, color);
 
 			return btn.state == WidgetState::StatePressed;
 		}
@@ -1538,6 +1539,8 @@ namespace sgui {
 			int y = 3;
 			bool changed = false;
 			for (int i = 0; i < items.size(); i++) {
+				if (y >= parent.h - 6) break;
+
 				auto it = items[i];
 				Rect ir(parent.x + 3, parent.y + y, parent.w - 6, 16);
 				if (w.state == WidgetState::StatePressed && ir.contains(m_input->mousePosition())) {
@@ -1555,6 +1558,42 @@ namespace sgui {
 			}
 			m_renderer->unclip();
 			m_renderer->rect(parent, fg);
+
+			if (w.clickedOut) m_state.focusedItem = -1;
+
+			return changed;
+		}
+
+		inline bool dropdown(int id, int* selected, const std::vector<std::string>& items) {
+			LayoutRegion reg = parentRegion();
+			std::string sel = *selected >= 0 ? items[*selected] : "Nothing Selected";
+
+			pushLayout(0, 0, reg.area.w, reg.area.h);
+				button(id, "");
+				pushLayout(0, 0, reg.area.w - 22, reg.area.h);
+					const int tw = textWidth(sel);
+					const int th = textHeight(sel);
+					LayoutRegion pr = parentRegion();
+					Rect p = pr.area;
+
+					m_renderer->clip(p.grow(-3));
+					this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, sel, Overflow::OverfowEllipses);
+					m_renderer->unclip();
+				popLayout();
+				chr(reg.area.x + reg.area.w - 18, reg.area.y + reg.area.h / 2 - 8, '\x7f');
+			popLayout();
+
+			bool changed = false;
+			if (m_state.focusedItem == id) {
+				pushLayout(0, reg.area.h, reg.area.w, 100);
+				changed = list(id, selected, items);
+				Rect lst = parentRegion().asRect();
+				if (lst.contains(m_input->mousePosition()) && m_input->isMouseButtonReleased(1)) {
+					m_state.focusedItem = -1;
+				}
+				popLayout();
+			}
+
 			return changed;
 		}
 
@@ -1589,6 +1628,7 @@ namespace sgui {
 
 		inline void prepare(int width, int height) {
 			m_renderer->prepare(width, height);
+			m_renderer->unclip();
 		}
 
 		inline void finish() {
