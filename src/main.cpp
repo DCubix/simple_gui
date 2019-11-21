@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
 		int w, h;
 		SDL_GetWindowSize(win, &w, &h);
 
-		gui.prepare(w, h);
+		gui.prepare();
 
 		static Color bg(0x0);
 		SDL_SetRenderDrawColor(ren, bg[0], bg[1], bg[2], 255);
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
 			gui.popLayout();
 		gui.popContainer();
 
-		gui.finish();
+		gui.finish(w, h);
 
 		SDL_RenderPresent(ren);
 		SDL_Delay(1000 / 60);

@@ -101,43 +101,55 @@ namespace sgui {
 			return font;
 		}
 
-		inline void created() override {}
-
 		inline void destroyed() override {
 			SDL_DestroyTexture(font);
 		}
 
-		inline void line(int x1, int y1, int x2, int y2, Color color) override {
-			SDL_SetRenderDrawColor(ren, color[0], color[1], color[2], color[3]);
-			SDL_RenderDrawLine(ren, x1, y1, x2, y2);
-		}
-
-		inline void rect(Rect rect, Color color, bool fill = false) override {
-			SDL_SetRenderDrawColor(ren, color[0], color[1], color[2], color[3]);
-
-			SDL_Rect rc = { rect.x, rect.y, rect.w, rect.h };
-			if (fill)	SDL_RenderFillRect(ren, &rc);
-			else		SDL_RenderDrawRect(ren, &rc);
-		}
-
-		inline void image(void* image, Rect src, Rect dst, Color color) override {
-			SDL_Texture* img = (SDL_Texture*)image;
-			SDL_Rect ssrc = { src.x, src.y, src.w, src.h };
-			SDL_Rect sdst = { dst.x, dst.y, dst.w, dst.h };
-
-			SDL_SetTextureBlendMode(img, SDL_BLENDMODE_BLEND);
-			SDL_SetTextureAlphaMod(img, color[3]);
-			SDL_SetTextureColorMod(img, color[0], color[1], color[2]);
-			SDL_RenderCopy(ren, img, &ssrc, &sdst);
-		}
-
-		inline void setClipRect(Rect rect) override {
-			SDL_Rect rc = { rect.x, rect.y, rect.w, rect.h };
-			SDL_RenderSetClipRect(ren, &rc);
-		}
-
-		inline void unsetClipRect() override {
-			SDL_RenderSetClipRect(ren, nullptr);
+		inline void processCommand(const Command& cmd) {
+			switch (cmd.type) {
+				case Command::CmdDrawLine: {
+					SDL_SetRenderDrawColor(ren, cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3]);
+					SDL_RenderDrawLine(ren, cmd.points[0].x, cmd.points[0].y, cmd.points[1].x, cmd.points[1].y);
+				} break;
+				case Command::CmdDrawRect: {
+					SDL_Rect rc = {
+						cmd.points[0].x, cmd.points[0].y,
+						cmd.points[1].x - cmd.points[0].x, cmd.points[1].y - cmd.points[0].y
+					};
+					SDL_SetRenderDrawColor(ren, cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3]);
+					SDL_RenderDrawRect(ren, &rc);
+				} break;
+				case Command::CmdFillRect: {
+					SDL_Rect rc = {
+						cmd.points[0].x, cmd.points[0].y,
+						cmd.points[1].x - cmd.points[0].x, cmd.points[1].y - cmd.points[0].y
+					};
+					SDL_SetRenderDrawColor(ren, cmd.color[0], cmd.color[1], cmd.color[2], cmd.color[3]);
+					SDL_RenderFillRect(ren, &rc);
+				} break;
+				case Command::CmdDrawImage: {
+					SDL_Rect dst = {
+						cmd.points[0].x, cmd.points[0].y,
+						cmd.points[1].x - cmd.points[0].x, cmd.points[1].y - cmd.points[0].y
+					};
+					SDL_Rect src = {
+						cmd.src.x, cmd.src.y, cmd.src.w, cmd.src.h
+					};
+					SDL_Texture* img = (SDL_Texture*)cmd.image;
+					SDL_SetTextureBlendMode(img, SDL_BLENDMODE_BLEND);
+					SDL_SetTextureAlphaMod(img, cmd.color[3]);
+					SDL_SetTextureColorMod(img, cmd.color[0], cmd.color[1], cmd.color[2]);
+					SDL_RenderCopy(ren, img, &src, &dst);
+				} break;
+				case Command::CmdSetClip: {
+					SDL_Rect rc = {
+						cmd.points[0].x, cmd.points[0].y,
+						cmd.points[1].x - cmd.points[0].x, cmd.points[1].y - cmd.points[0].y
+					};
+					SDL_RenderSetClipRect(ren, &rc);
+				} break;
+				case Command::CmdUnsetClip: SDL_RenderSetClipRect(ren, nullptr); break;
+			}
 		}
 
 		SDL_Texture* font;

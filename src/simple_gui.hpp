@@ -788,6 +788,7 @@ static const char* font_data =
 #include <memory>
 
 #define GEN_ID (0xBEEF + __LINE__)
+#define SGUI_RENDERER_PRIORITY_HIGHEST 0xFFFF
 
 namespace sgui {
 	using byte = unsigned char;
@@ -954,20 +955,109 @@ namespace sgui {
 
 	class Renderer {
 	public:
+		struct Command {
+			enum {
+				CmdDummy = 0,
+				CmdDrawLine,
+				CmdDrawRect,
+				CmdFillRect,
+				CmdDrawImage,
+				CmdSetClip,
+				CmdUnsetClip
+			} type{ CmdDummy };
+
+			std::vector<Point> points;
+
+			Color color;
+
+			void* image{ nullptr };
+			Rect src;
+
+			int priority;
+		};
+
 		virtual void* loadFont(const std::vector<byte>& pixels, int width, int height) = 0;
+		virtual void created() {}
+		virtual void destroyed() {}
 
-		virtual void created() = 0;
-		virtual void destroyed() = 0;
+		virtual void processCommand(const Command& cmd) = 0;
+		virtual void begin() {}
+		virtual void end(int width, int height) {}
 
-		virtual void line(int x1, int y1, int x2, int y2, Color color) = 0;
-		virtual void rect(Rect rect, Color color, bool fill = false) = 0;
-		virtual void image(void* image, Rect src, Rect dst, Color color) = 0;
+		inline void finish(int width, int height) {
+			std::sort(m_commands.begin(), m_commands.end(), [](const Command& a, const Command& b) {
+				return a.priority < b.priority;
+			});
 
-		virtual void setClipRect(Rect rect) = 0;
-		virtual void unsetClipRect() = 0;
+			while (!m_commands.empty()) {
+				Command cmd = m_commands.front();
+				m_commands.erase(m_commands.begin());
+				processCommand(cmd);
+			}
+			end(width, height);
+			m_z = 0;
+			m_zIndices.clear();
+		}
 
-		virtual void prepare(int width, int height) {}
-		virtual void finish() {}
+		inline void line(int x1, int y1, int x2, int y2, Color color) {
+			Command cmd{};
+			cmd.priority = m_z++;
+			cmd.type = Command::CmdDrawLine;
+			cmd.color = color;
+			cmd.points.push_back(Point(x1, y1));
+			cmd.points.push_back(Point(x2, y2));
+			m_commands.push_back(cmd);
+		}
+
+		inline void rect(Rect rect, Color color, bool fill = false) {
+			Command cmd{};
+			cmd.priority = m_z++;
+			cmd.type = fill ? Command::CmdFillRect : Command::CmdDrawRect;
+			cmd.color = color;
+			cmd.points.push_back(Point(rect.x, rect.y));
+			cmd.points.push_back(Point(rect.x + rect.w, rect.y + rect.h));
+			m_commands.push_back(cmd);
+		}
+
+		inline void image(void* image, Rect src, Rect dst, Color color) {
+			Command cmd{};
+			cmd.priority = m_z++;
+			cmd.type = Command::CmdDrawImage;
+			cmd.color = color;
+			cmd.image = image;
+			cmd.src = src;
+			cmd.points.push_back(Point(dst.x, dst.y));
+			cmd.points.push_back(Point(dst.x + dst.w, dst.y + dst.h));
+			m_commands.push_back(cmd);
+		}
+
+		inline void setClipRect(Rect rect) {
+			Command cmd{};
+			cmd.priority = m_z++;
+			cmd.type = Command::CmdSetClip;
+			cmd.points.push_back(Point(rect.x, rect.y));
+			cmd.points.push_back(Point(rect.x + rect.w, rect.y + rect.h));
+			m_commands.push_back(cmd);
+		}
+
+		inline void unsetClipRect() {
+			Command cmd{};
+			cmd.priority = m_z++;
+			cmd.type = Command::CmdUnsetClip;
+			m_commands.push_back(cmd);
+		}
+
+		inline void pushZIndex(int index) {
+			m_zIndices.push_back(m_z);
+			m_z = index;
+		}
+
+		inline void popZIndex() {
+			if (!m_zIndices.empty()) {
+				m_z = m_zIndices.back();
+				m_zIndices.pop_back();
+			}
+		}
 
 		inline void clip(Rect rect) {
 			if (rect.w < 0) {
@@ -984,6 +1074,10 @@ namespace sgui {
 		inline void unclip() {
 			unsetClipRect();
 		}
+	private:
+		std::vector<Command> m_commands;
+		std::vector<int> m_zIndices;
+		int m_z{ 0 };
 	};
 
 	enum Key {
@@ -1559,7 +1653,10 @@ namespace sgui {
 			m_renderer->unclip();
 			m_renderer->rect(parent, fg);
 
-			if (w.clickedOut) m_state.focusedItem = -1;
+			if (w.clickedOut) {
+				m_state.focusedItem = -1;
+				m_state.prioritizedItem = -1;
+			}
 
 			return changed;
 		}
@@ -1585,12 +1682,16 @@ namespace sgui {
 
 			bool changed = false;
 			if (m_state.focusedItem == id) {
+				m_state.prioritizedItem = id;
 				pushLayout(0, reg.area.h, reg.area.w, 100);
-				changed = list(id, selected, items);
-				Rect lst = parentRegion().asRect();
-				if (lst.contains(m_input->mousePosition()) && m_input->isMouseButtonReleased(1)) {
-					m_state.focusedItem = -1;
-				}
+					m_renderer->pushZIndex(SGUI_RENDERER_PRIORITY_HIGHEST);
+						changed = list(id, selected, items);
+					m_renderer->popZIndex();
+					Rect lst = parentRegion().asRect();
+					if (lst.contains(m_input->mousePosition()) && m_input->isMouseButtonReleased(1)) {
+						m_state.focusedItem = -1;
+						m_state.prioritizedItem = -1;
+					}
 				popLayout();
 			}
 
@@ -1626,15 +1727,15 @@ namespace sgui {
 		inline InputManager* input() { return m_input.get(); }
 		inline Renderer* renderer() { return m_renderer.get(); }
 
-		inline void prepare(int width, int height) {
-			m_renderer->prepare(width, height);
+		inline void prepare() {
+			m_renderer->begin();
 			m_renderer->unclip();
 		}
 
-		inline void finish() {
+		inline void finish(int width, int height) {
 			m_input->clear();
 			m_renderer->unclip();
-			m_renderer->finish();
+			m_renderer->finish(width, height);
 		}
 
 	protected:
@@ -1646,7 +1747,7 @@ namespace sgui {
 			TextBoxState text{};
 			WidgetState state{ WidgetState::StateNormal };
 
-			int focusedItem{ -1 };
+			int focusedItem{ -1 }, prioritizedItem{ -1 };
 		} m_state;
 
 		std::unique_ptr<Renderer> m_renderer;
@@ -1687,23 +1788,27 @@ namespace sgui {
 			wg.justFocused = false;
 			wg.clickedOut = false;
 			
-			if (parent.contains(m_input->mousePosition())) {
-				if (m_input->isMouseButtonDown(1)) {
-					wg.state = WidgetState::StateActive;
+			if (m_state.state != WidgetState::StateDisabled &&
+				(m_state.prioritizedItem == -1 || m_state.prioritizedItem == id)
+			) {
+				if (parent.contains(m_input->mousePosition())) {
+					if (m_input->isMouseButtonDown(1)) {
+						wg.state = WidgetState::StateActive;
+					} else {
+						wg.state = WidgetState::StateHovered;
+					}
+
+					if (m_input->isMouseButtonReleased(1)) wg.state = WidgetState::StatePressed;
 				} else {
-					wg.state = WidgetState::StateHovered;
+					wg.state = WidgetState::StateNormal;
+					if (m_input->isMouseButtonPressed(1)) wg.clickedOut = true;
 				}
 
-				if (m_input->isMouseButtonReleased(1)) wg.state = WidgetState::StatePressed;
-			} else {
-				wg.state = WidgetState::StateNormal;
-				if (m_input->isMouseButtonPressed(1)) wg.clickedOut = true;
-			}
-
-			if (wg.state == WidgetState::StateActive && m_state.focusedItem != id) {
-				m_state.text.cursor = 0;
-				m_state.focusedItem = id;
-				wg.justFocused = true;
+				if (wg.state == WidgetState::StateActive && m_state.focusedItem != id) {
+					m_state.text.cursor = 0;
+					m_state.focusedItem = id;
+					wg.justFocused = true;
+				}
 			}
 
 			return wg;
