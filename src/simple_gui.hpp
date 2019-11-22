@@ -1016,7 +1016,7 @@ namespace sgui {
 		virtual void begin() {}
 
 		/**
-		 * @brief  Called after the rendering API performs the rendering
+		 * @brief  Called after the GUI is rendered as commands
 		 * @note   
 		 * @retval None
 		 */
