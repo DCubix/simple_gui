@@ -1526,10 +1526,10 @@ namespace sgui {
 					}
 				}
 
-				if (w.justFocused) {
-					m_state.text.selectionStart = -1;
-					m_state.text.cursor = 0;
-				}
+				// if (w.justFocused) {
+				// 	m_state.text.selectionStart = -1;
+				// 	m_state.text.cursor = 0;
+				// }
 
 				bool ctrl = false;
 				if (m_input->isKeyDown(Key::KeyCtrl)) {
