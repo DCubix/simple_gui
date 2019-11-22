@@ -39,7 +39,27 @@ int main(int argc, char** argv) {
 		SDL_SetRenderDrawColor(ren, bg[0], bg[1], bg[2], 255);
 		SDL_RenderClear(ren);
 
-		gui.pushContainer(10, 10, 240, 470);
+		gui.pushContainer(0, 0, w, 22);
+			static int fileSel = -1;
+			static int editSel = -1;
+			gui.pushLayout(0, 0, gui.textWidth("File") + 16, 0, Dock::DockLeft, 0);
+				if (gui.menu(GEN_ID, "File", &fileSel, { "New", "-", "Open", "Save", "-", "Exit" })) {
+
+				}
+			gui.popLayout();
+
+			gui.pushLayout(0, 0, gui.textWidth("Edit") + 16, 0, Dock::DockLeft, 0);
+				if (gui.menu(GEN_ID, "Edit", &editSel, { "Undo", "Redo", "-", "Random Background" })) {
+					if (editSel == 2) {
+						bg.r = float(std::rand()) / RAND_MAX;
+						bg.g = float(std::rand()) / RAND_MAX;
+						bg.b = float(std::rand()) / RAND_MAX;
+					}
+				}
+			gui.popLayout();
+		gui.popContainer();
+
+		gui.pushContainer(10, 25, 240, 420);
 			gui.pushContainer(0, 0, 0, 64, Dock::DockTop);
 				gui.text(0, 0, "Hello World! This is a simple test.", Overflow::OverfowWrap);
 			gui.popContainer();

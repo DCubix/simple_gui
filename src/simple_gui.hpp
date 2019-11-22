@@ -1262,6 +1262,8 @@ namespace sgui {
 
 		inline void pushContainer(int x, int y, int w, int h, Dock dock = Dock::DockNone, int pad = -1, int gap = -1) {
 			LayoutRegion reg = pushLayout(x, y, w, h, dock, pad, gap);
+			Rect shad(reg.area.x + 1, reg.area.y + 1, reg.area.w, reg.area.h);
+			m_renderer->rect(shad, Color(0.0f, 0.0f, 0.0f, 0.45f), true);
 			m_renderer->rect(reg.area, Color(m_style[StyleProperty::PropPrimaryColor]), true);
 			m_renderer->rect(reg.area, Color(m_style[StyleProperty::PropPrimaryColor]).bright(2.0f));
 			m_renderer->clip(reg.asRect());
@@ -1696,6 +1698,93 @@ namespace sgui {
 			}
 
 			return changed;
+		}
+		
+		inline bool menu(int id, const std::string& text, int* selected, const std::vector<std::string>& items) {
+			const Widget btn = widget(id);
+
+			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
+			const Color base = prim.bright(0.9f);
+			const Color active = prim.bright(0.6f);
+			const Color hover = Color(m_style[StyleProperty::PropSecondaryColor]).bright(1.2f);
+			const Color fg = prim.bright(2.0f);
+
+			const Rect p = btn.parent;
+			const int tw = textWidth(text);
+			const int th = textHeight(text);
+
+			switch (btn.state) {
+				default:
+				case WidgetState::StateNormal: m_renderer->rect(p, base, true); break;
+				case WidgetState::StateActive: m_renderer->rect(p, active, true); break;
+				case WidgetState::StateHovered: m_renderer->rect(p, hover, true); break;
+			}
+			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text);
+
+			bool clicked = false, activeItem = false;
+			if (m_state.prioritizedItem == id) {
+				int mw = -1;
+				for (auto txt : items) {
+					if (txt == "-") continue;
+					mw = std::max(mw, textWidth(txt));
+				}
+				mw += 40;
+
+				pushLayout(0, btn.parent.h, mw, (items.size() * 16) + 16, DockNone, 4, 2);
+					LayoutRegion pr = parentRegion();
+					const Rect shad = Rect(pr.area.x + 1, pr.area.y + 2, pr.area.w, pr.area.h);
+					m_renderer->pushZIndex(SGUI_RENDERER_PRIORITY_HIGHEST);
+						m_renderer->rect(shad, Color(0.0f, 0.0f, 0.0f, 0.45f), true);
+						m_renderer->rect(pr.area, base, true);
+						m_renderer->rect(pr.area, fg);
+
+						int y = pr.pad;
+						int i = 0;
+						for (auto txt : items) {
+							if (txt == "-") {
+								m_renderer->line(
+									pr.area.x + pr.pad, pr.area.y + y + 2,
+									pr.area.x + pr.area.w - pr.pad * 2, pr.area.y + y + 2,
+									Color(0.0f, 0.0f, 0.0f, 0.6f)
+								);
+								y += 3;
+							} else {
+								Rect tr(pr.area.x + pr.pad, pr.area.y + y, pr.area.w - pr.pad * 2, 16 + pr.pad);
+								Point mp = m_input->mousePosition();
+								if (tr.contains(mp) && pr.area.contains(mp)) {
+									if (m_input->isMouseButtonDown(1)) {
+										m_renderer->rect(tr, active, true);
+										activeItem = true;
+									} else {
+										m_renderer->rect(tr, hover, true);
+									}
+
+									if (m_input->isMouseButtonReleased(1)) {
+										*selected = i;
+										clicked = true;
+										m_state.focusedItem = -1;
+										m_state.prioritizedItem = -1;
+									}
+								}
+								this->text(pr.pad, y, txt);
+								y += 20;
+								i++;
+							}
+						}
+					m_renderer->popZIndex();
+				popLayout();
+			} else {
+				if (btn.state == WidgetState::StatePressed && m_state.focusedItem == id) {
+					m_state.prioritizedItem = id;
+				}
+			}
+
+			if (!activeItem && btn.clickedOut) {
+				m_state.focusedItem = -1;
+				m_state.prioritizedItem = -1;
+			}
+
+			return clicked;
 		}
 
 		inline LayoutRegion parentRegion(int pad = -1) {
