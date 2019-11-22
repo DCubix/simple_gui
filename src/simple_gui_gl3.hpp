@@ -192,7 +192,8 @@ void main() {
 					glUniform1i(m_uTexOn, 0);
 				}
 
-				glScissor(b.scissor.x, height - b.scissor.h - b.scissor.y, b.scissor.w, b.scissor.h);
+				Rect sc = b.scissor.grow(1);
+				glScissor(sc.x, height - sc.h - sc.y, sc.w, sc.h);
 				if (b.length > 0) glDrawArrays(b.prim, b.offset, b.length);
 
 				if (b.tex.id != 0) {
