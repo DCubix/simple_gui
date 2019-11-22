@@ -8,6 +8,8 @@
 
 #include "SDL2/SDL.h"
 
+#define lerp(a, b, t) ((1.0f - t) * a + b * t)
+
 #include "simple_gui_sdl2.hpp"
 using namespace sgui;
 
@@ -36,7 +38,13 @@ int main(int argc, char** argv) {
 		gui.prepare();
 
 		static Color bg(0x0);
-		SDL_SetRenderDrawColor(ren, bg[0], bg[1], bg[2], 255);
+		static Color abg(0x0);
+
+		abg.r = lerp(abg.r, bg.r, 0.1f);
+		abg.g = lerp(abg.g, bg.g, 0.1f);
+		abg.b = lerp(abg.b, bg.b, 0.1f);
+
+		SDL_SetRenderDrawColor(ren, abg[0], abg[1], abg[2], 255);
 		SDL_RenderClear(ren);
 
 		gui.pushContainer(0, 0, w, 22);

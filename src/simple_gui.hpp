@@ -976,12 +976,50 @@ namespace sgui {
 			int priority;
 		};
 
+		/**
+		 * @brief  Loads the default bitmap font into the GUI
+		 * @note   See the SDL2 implementation for an exampe
+		 * @param  pixels: Image pixels in RGBA form
+		 * @param  width: Image width
+		 * @param  height: Image height
+		 * @retval A pointer to a structure representing your texture handle
+		 */
 		virtual void* loadFont(const std::vector<byte>& pixels, int width, int height) = 0;
+
+		/**
+		 * @brief  Use this function for rendering API initialization
+		 * @note   
+		 * @retval None
+		 */
 		virtual void created() {}
+
+		/**
+		 * @brief  Use this function for rendering API resource disposal
+		 * @note   See the SDL2 implementation for an exampe
+		 * @retval None
+		 */
 		virtual void destroyed() {}
 
+		/**
+		 * @brief  Implement this function to process the draw commands.
+		 * @note   See the SDL2 implementation for an exampe
+		 * @param  cmd: The command currently being processed
+		 * @retval None
+		 */
 		virtual void processCommand(const Command& cmd) = 0;
+
+		/**
+		 * @brief  Called before the rendering API performs the rendering
+		 * @note   
+		 * @retval None
+		 */
 		virtual void begin() {}
+
+		/**
+		 * @brief  Called after the rendering API performs the rendering
+		 * @note   
+		 * @retval None
+		 */
 		virtual void end(int width, int height) {}
 
 		inline void finish(int width, int height) {
