@@ -1312,12 +1312,12 @@ namespace sgui {
 			popLayout(); 
 		}
 
-		inline int chr(int x, int y, char c, int color = -2) {
+		inline int chr(int x, int y, char c, Color color) {
 			c = c & 0x7F;
 			if (c < ' ') c = 0;
 			else 		 c -= ' ';
 
-			const Color fg = color < -1 ? Color(m_style[StyleProperty::PropTextColor]) : Color(color);
+			const Color fg = color;
 			const Color sh = Color(0x000000FF);
 
 			const int cw = 8;
@@ -1344,7 +1344,7 @@ namespace sgui {
 			return spl.size() * 16;
 		}
 
-		inline void text(int x, int y, const std::string& txt, Overflow overflow = Overflow::OverfowNone, int color = -2) {
+		inline void text(int x, int y, const std::string& txt, Color color, Overflow overflow = Overflow::OverfowNone) {
 			auto spl = tokenize(txt, ' ');
 			Rect parent = parentRegion().asRect();
 
@@ -1376,7 +1376,11 @@ namespace sgui {
 			}
 		}
 
-		inline bool button(int id, const std::string& text, int color = -2) {
+		inline void text(int x, int y, const std::string& txt, Overflow overflow = Overflow::OverfowNone) {
+			text(x, y, txt, Color(m_style[StyleProperty::PropTextColor]), overflow);
+		}
+
+		inline bool button(int id, const std::string& text) {
 			const Widget btn = widget(id);
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
@@ -1400,7 +1404,7 @@ namespace sgui {
 				case WidgetState::StateHovered: m_renderer->rect(p, hover, true); m_renderer->rect(p, fg); break;
 			}
 
-			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Overflow::OverfowEllipses, color);
+			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Color(m_style[StyleProperty::PropTextColor]), Overflow::OverfowEllipses);
 
 			return btn.state == WidgetState::StatePressed;
 		}
@@ -1428,14 +1432,14 @@ namespace sgui {
 			const Rect dstT1 = { parent.x + rel + 1, parent.y + 4, thumbSize, parent.h - 6 };
 			
 			Color tex = Color(m_style[StyleProperty::PropTextColor]);
-			tex.a = 0.3f;
+			tex.a = 0.5f;
 
 			m_renderer->rect(shadow, Color(0.0f, 0.0f, 0.0f, 0.45f), true);
 			m_renderer->rect(parent, track, true);
 			m_renderer->rect(parent, fg);
 
 			auto vTxt = format(fmt, *v);
-			text(parent.w / 2 - textWidth(vTxt) / 2, parent.h / 2 - 8, vTxt, Overflow::OverfowNone, tex.hex());
+			text(parent.w / 2 - textWidth(vTxt) / 2, parent.h / 2 - 8, vTxt, tex, Overflow::OverfowNone);
 
 			switch (w.state) {
 				default:
@@ -1619,9 +1623,7 @@ namespace sgui {
 			return changed;
 		}
 
-		inline bool toggle(int id, const std::string& text, bool* v, int color = -2) {
-			color = color < -1 ? m_style[StyleProperty::PropTextColor] : color;
-
+		inline bool toggle(int id, const std::string& text, bool* v) {
 			const Widget btn = widget(id);
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
@@ -1646,7 +1648,7 @@ namespace sgui {
 					m_renderer->rect(p, hover, true); m_renderer->rect(p, fg);
 				}
 			}
-			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Overflow::OverfowNone, color);
+			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Color(m_style[StyleProperty::PropTextColor]), Overflow::OverfowNone);
 
 			if (btn.state == WidgetState::StatePressed) {
 				*v = !(*v);
@@ -1685,7 +1687,7 @@ namespace sgui {
 				if (*selected == i) {
 					m_renderer->rect(ir, Color(m_style[StyleProperty::PropTextColor]), true);
 				}
-				text(3, y, it, Overflow::OverfowEllipses, *selected == i ? sel.hex() : -2);
+				text(3, y, it, *selected == i ? sel : Color(m_style[StyleProperty::PropTextColor]), Overflow::OverfowEllipses);
 				y += textHeight(it);
 
 				m_renderer->line(parent.x, parent.y + y, parent.x + parent.w, parent.y + y, base);
@@ -1717,7 +1719,7 @@ namespace sgui {
 					this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, sel, Overflow::OverfowEllipses);
 					m_renderer->unclip();
 				popLayout();
-				chr(reg.area.x + reg.area.w - 18, reg.area.y + reg.area.h / 2 - 8, '\x7f');
+				chr(reg.area.x + reg.area.w - 18, reg.area.y + reg.area.h / 2 - 8, '\x7f', Color(m_style[StyleProperty::PropTextColor]));
 			popLayout();
 
 			bool changed = false;
@@ -1757,7 +1759,7 @@ namespace sgui {
 				case WidgetState::StateActive: m_renderer->rect(p, active, true); break;
 				case WidgetState::StateHovered: m_renderer->rect(p, hover, true); break;
 			}
-			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text);
+			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Color(m_style[StyleProperty::PropTextColor]));
 
 			bool clicked = false, activeItem = false;
 			if (m_state.prioritizedItem == id) {
@@ -1804,7 +1806,7 @@ namespace sgui {
 										m_state.prioritizedItem = -1;
 									}
 								}
-								this->text(pr.pad, y, txt);
+								this->text(pr.pad, y, txt, Color(m_style[StyleProperty::PropTextColor]));
 								y += 20;
 								i++;
 							}
@@ -1853,6 +1855,8 @@ namespace sgui {
 
 		inline InputManager* input() { return m_input.get(); }
 		inline Renderer* renderer() { return m_renderer.get(); }
+
+		inline std::array<int, StylePropCount>& style() { return m_style; }
 
 		inline void prepare() {
 			m_renderer->begin();
