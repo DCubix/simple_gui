@@ -2123,11 +2123,11 @@ namespace sgui {
 				}
 			}
 
-			m_renderer->pushZIndex(999999);
-			m_renderer->rect(prect, Color(1.0f, 0.0f, 0.0f, 1.0f));
-			m_renderer->rect(parent, Color(0.0f, 1.0f, 0.0f, 1.0f));
-			m_renderer->rect(clickableArea, Color(0.0f, 0.0f, 1.0f, 1.0f));
-			m_renderer->popZIndex();
+			// m_renderer->pushZIndex(999999);
+			// m_renderer->rect(prect, Color(1.0f, 0.0f, 0.0f, 1.0f));
+			// m_renderer->rect(parent, Color(0.0f, 1.0f, 0.0f, 1.0f));
+			// m_renderer->rect(clickableArea, Color(0.0f, 0.0f, 1.0f, 1.0f));
+			// m_renderer->popZIndex();
 
 			return wg;
 		}
