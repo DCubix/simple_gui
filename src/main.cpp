@@ -83,10 +83,6 @@ int main(int argc, char** argv) {
 			gui.pushLayout(0, 0, 120, 20, Dock::DockTop);
 				gui.button("Button 1");
 			gui.popLayout();
-			gui.pushLayout(0, 0, 120, 20, Dock::DockTop);
-				static int ddsel = -1;
-				gui.dropdown(&ddsel, { "Item 0", "Item 1", "Item 2", "Item 3" });
-			gui.popLayout();
 		gui.popScrollContainer();
 
 		gui.finish(w, h);
