@@ -786,6 +786,7 @@ static const char* font_data =
 #include <cstdarg>
 #include <sstream>
 #include <memory>
+#include <tuple>
 
 #define GEN_ID (0xBEEF + __LINE__)
 #define SGUI_RENDERER_PRIORITY_HIGHEST 0xFFFF
@@ -887,6 +888,31 @@ namespace sgui {
 			);
 		}
 
+		inline Rect intersection(const Rect& r) const {
+			int tx1 = x;
+			int ty1 = y;
+			int rx1 = r.x;
+			int ry1 = r.y;
+			int tx2 = tx1; tx2 += w;
+			int ty2 = ty1; ty2 += h;
+			int rx2 = rx1; rx2 += r.w;
+			int ry2 = ry1; ry2 += r.h;
+			if (tx1 < rx1) tx1 = rx1;
+			if (ty1 < ry1) ty1 = ry1;
+			if (tx2 > rx2) tx2 = rx2;
+			if (ty2 > ry2) ty2 = ry2;
+			tx2 -= tx1;
+			ty2 -= ty1;
+			return Rect(tx1, ty1, tx2, ty2);
+		}
+
+		inline bool overlaps(const Rect& r) const {
+			return x + w >= r.x &&
+					x <= r.x + r.w &&
+					y + h >= r.y &&
+					y <= r.y + r.h;
+		}
+
 		inline bool operator ==(const Rect& o) {
 			return x == o.x && y == o.y && w == o.w && h == o.h;
 		}
@@ -935,6 +961,11 @@ namespace sgui {
 		OverfowEllipses
 	};
 
+	enum Orientation {
+		Horizontal = 0,
+		Vertical
+	};
+
 	struct LayoutRegion {
 		Rect area{};
 		int pad{ 0 };
@@ -950,7 +981,7 @@ namespace sgui {
 	struct Widget {
 		bool justFocused, clickedOut;
 		WidgetState state{ WidgetState::StateNormal };
-		Rect parent;
+		Rect parent, intersection;
 	};
 
 	class Renderer {
@@ -1242,16 +1273,25 @@ namespace sgui {
 			
 			int dx = x, dy = y, dw = w, dh = h, pd = pad;
 
+			m_rects.push_back(Rect(dx, dy, dw, dh));
+			Rect& prect = m_rects.back();
+
 			if (!m_layoutRegions.empty()) {
 				LayoutRegion& region = m_layoutRegions.back();
 				Rect& parent = region.area;
 				int pad = region.pad;
 				switch (dock) {
 					default: {
+						prect.x += parent.x + pad;
+						prect.y += parent.y + pad;
+
 						dx += parent.x + pad;
 						dy += parent.y + pad;
 					} break;
 					case Dock::DockTop: {
+						prect.x = parent.x + pad;
+						prect.y = parent.y + pad;
+
 						dx = parent.x + pad;
 						dy = parent.y + pad;
 						dw = parent.w - pad * 2;
@@ -1259,12 +1299,18 @@ namespace sgui {
 						parent.h -= dh + gap;
 					} break;
 					case Dock::DockBottom: {
+						prect.x = parent.x + pad;
+						prect.y = parent.y + (parent.h - dh - pad);
+
 						dx = parent.x + pad;
 						dy = parent.y + (parent.h - dh - pad);
 						dw = parent.w - pad * 2;
 						parent.h -= (dh + gap);
 					} break;
 					case Dock::DockLeft: {
+						prect.x = parent.x + pad;
+						prect.y = parent.y + pad;
+
 						dx = parent.x + pad;
 						dy = parent.y + pad;
 						dh = parent.h - pad * 2;
@@ -1272,6 +1318,9 @@ namespace sgui {
 						parent.w -= dw + gap;
 					} break;
 					case Dock::DockRight: {
+						prect.x = parent.x + (parent.w - dw - pad);
+						prect.y = parent.y + pad;
+
 						dx = parent.x + (parent.w - dw - pad);
 						dy = parent.y + pad;
 						dh = parent.h - pad * 2;
@@ -1279,12 +1328,20 @@ namespace sgui {
 						parent.w -= dw + gap;
 					} break;
 					case Dock::DockFill: {
+						prect.x = parent.x + pad;
+						prect.y = parent.y + pad;
+
 						dx = parent.x + pad;
 						dy = parent.y + pad;
 						dw = parent.w - pad * 2;
 						dh = parent.h - pad * 2;
 					} break;
 				}
+			}
+
+			if (!m_offsets.empty()) {
+				Point off = m_offsets.back();
+				dx += off.x; dy += off.y;
 			}
 
 			LayoutRegion reg = LayoutRegion(Rect(dx, dy, dw, dh), pd);
@@ -1294,7 +1351,10 @@ namespace sgui {
 		}
 
 		inline bool popLayout() {
-			if (!m_layoutRegions.empty()) m_layoutRegions.pop_back();
+			if (!m_layoutRegions.empty()) {
+				m_layoutRegions.pop_back();
+				m_rects.pop_back();
+			}
 			return m_layoutRegions.empty();
 		}
 
@@ -1310,6 +1370,123 @@ namespace sgui {
 		inline void popContainer() {
 			m_renderer->unclip();
 			popLayout(); 
+		}
+
+		inline void pushOffset(int x, int y) {
+			m_offsets.push_back(Point(x, y));
+		}
+
+		inline void popOffset() {
+			if (!m_offsets.empty()) m_offsets.pop_back();
+		}
+
+		inline void pushScrollContainer(int id, int x, int y, int w, int h, int virtualWidth, int virtualHeight, Dock dock = Dock::DockNone, int pad = -1, int gap = -1) {
+			const int scrollSize = 16;
+			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
+			const Color fg = prim.bright(2.0f);
+			const Color track = prim.bright(0.5f);
+
+			pushLayout(x, y, w, h, dock, 0, 0);
+			Rect r = parentRegion().area;
+
+			if (m_scrollBars.find(id) == m_scrollBars.end()) m_scrollBars[id] = 0;
+			if (m_scrollBars.find(id + 1) == m_scrollBars.end()) m_scrollBars[id + 1] = 0;
+			pushLayout(w - scrollSize, 0, scrollSize, h - scrollSize);
+				scroll(id, virtualHeight, &m_scrollBars[id], Orientation::Vertical);
+			popLayout();
+
+			pushLayout(0, h - scrollSize, w - scrollSize, scrollSize);
+				scroll(id + 1, virtualWidth, &m_scrollBars[id + 1], Orientation::Horizontal);
+			popLayout();
+
+			m_renderer->rect(Rect(r.x + r.w - scrollSize, r.y + r.h - scrollSize, scrollSize, scrollSize), track, true);
+			m_renderer->rect(Rect(r.x + r.w - scrollSize, r.y + r.h - scrollSize, scrollSize, scrollSize), fg);
+
+			pushContainer(0, 0, w - scrollSize, h - scrollSize, Dock::DockNone, pad, 0);
+			pushLayout(0, 0, w - scrollSize, h - scrollSize, Dock::DockNone, 0, gap);
+			pushOffset(-m_scrollBars[id + 1], -m_scrollBars[id]);
+		}
+
+		inline void popScrollContainer() {
+			popOffset();
+			popLayout();
+			popContainer();
+			popLayout();
+		}
+
+		inline bool scroll(int id, float vmax, float* v, Orientation ori) {
+			const Widget w = widget(id);
+			const Rect parent = w.parent;
+			const Rect shadow{ parent.x+1, parent.y+1, parent.w , parent.h };
+
+			const float scrollSize = ori == Horizontal ? float(parent.w) : float(parent.h);
+
+			float vratio = scrollSize > vmax ? vmax / scrollSize : scrollSize / vmax;
+			int thumbSize = int(scrollSize * vratio);
+
+			const float size = scrollSize - (thumbSize + 6);
+
+			float ratio = (*v) / vmax;
+			int rel = int(ratio * size);
+
+			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
+			const Color track = prim.bright(0.5f);
+			const Color base = prim.bright(0.9f);
+			const Color active = prim.bright(0.6f);
+			const Color hover = Color(m_style[StyleProperty::PropSecondaryColor]).bright(1.2f);
+			const Color fg = prim.bright(2.0f);
+
+			Rect dstT = { parent.x, parent.y, 0, 0 };
+			Rect dstT1 = { parent.x + 1, parent.y + 1, 0, 0 };
+
+			if (ori == Horizontal) {
+				dstT.x += rel + 3;
+				dstT1.x += rel + 3;
+				dstT.y += 3;
+				dstT1.y += 3;
+				dstT.w = dstT1.w = thumbSize;
+				dstT.h = dstT1.h = parent.h - 6;
+			} else {
+				dstT.x += 3;
+				dstT1.x += 3;
+				dstT.y += rel + 3;
+				dstT1.y += rel + 3;
+				dstT.w = dstT1.w = parent.w - 6;
+				dstT.h = dstT1.h = thumbSize;
+			}
+			
+			Color tex = Color(m_style[StyleProperty::PropTextColor]);
+			tex.a = 0.5f;
+
+			m_renderer->rect(shadow, Color(0.0f, 0.0f, 0.0f, 0.45f), true);
+			m_renderer->rect(parent, track, true);
+			m_renderer->rect(parent, fg);
+
+			switch (w.state) {
+				default:
+				case WidgetState::StateNormal: m_renderer->rect(dstT, base, true); m_renderer->rect(dstT, fg); break;
+				case WidgetState::StateActive: m_renderer->rect(dstT1, active, true); m_renderer->rect(dstT1, fg); break;
+				case WidgetState::StateHovered: m_renderer->rect(dstT, hover, true); m_renderer->rect(dstT, fg); break;
+			}
+
+			if (w.state == WidgetState::StateActive) {
+				const Point mp = m_input->mousePosition();
+				if (ori == Horizontal) {
+					int mousePos = (mp.x - (parent.x + thumbSize / 2));
+					if (mousePos < 0) mousePos = 0;
+					if (mousePos > size) mousePos = int(size);
+					float rat = float(mousePos) / size;
+					*v = rat * vmax;
+				} else {
+					int mousePos = (mp.y - (parent.y + thumbSize / 2));
+					if (mousePos < 0) mousePos = 0;
+					if (mousePos > size) mousePos = int(size);
+					float rat = float(mousePos) / size;
+					*v = rat * vmax;
+				}
+				return true;
+			}
+			return false;
 		}
 
 		inline int chr(int x, int y, char c, Color color) {
@@ -1827,10 +2004,17 @@ namespace sgui {
 			return clicked;
 		}
 
-		inline LayoutRegion parentRegion(int pad = -1) {
+		inline LayoutRegion parentRegion() {
 			LayoutRegion rec;
 			if (!m_layoutRegions.empty()) rec = m_layoutRegions.back();
 			else rec = LayoutRegion(Rect(0, 0, 1, 1), 0);
+			return rec;
+		}
+
+		inline Rect parentRect() {
+			Rect rec;
+			if (m_rects.size() >= 2) rec = m_rects[m_rects.size() - 2];
+			else rec = Rect(0, 0, 1, 1);
 			return rec;
 		}
 
@@ -1861,6 +2045,7 @@ namespace sgui {
 		inline void prepare() {
 			m_renderer->begin();
 			m_renderer->unclip();
+			//m_scrollBars.clear();
 		}
 
 		inline void finish(int width, int height) {
@@ -1885,6 +2070,10 @@ namespace sgui {
 		std::unique_ptr<InputManager> m_input;
 
 		std::vector<LayoutRegion> m_layoutRegions;
+		std::vector<Rect> m_rects;
+		std::vector<Point> m_offsets;
+
+		std::map<int, float> m_scrollBars;
 
 		std::array<int, StylePropCount> m_style;
 		void* m_font;
@@ -1912,17 +2101,21 @@ namespace sgui {
 		}
 
 		inline Widget widget(int id) {
+			Rect prect = parentRect();
 			Rect parent = parentRegion().asRect();
+			Rect clickableArea = prect.intersection(parent);
 			Widget wg;
 			wg.state = m_state.state;
 			wg.parent = parent;
+			wg.intersection = clickableArea;
 			wg.justFocused = false;
 			wg.clickedOut = false;
 			
 			if (m_state.state != WidgetState::StateDisabled &&
-				(m_state.prioritizedItem == -1 || m_state.prioritizedItem == id)
+				(m_state.prioritizedItem == -1 || m_state.prioritizedItem == id) &&
+				prect.overlaps(parent)
 			) {
-				if (parent.contains(m_input->mousePosition())) {
+				if (clickableArea.contains(m_input->mousePosition())) {
 					if (m_input->isMouseButtonDown(1)) {
 						wg.state = WidgetState::StateActive;
 					} else {
@@ -1941,6 +2134,12 @@ namespace sgui {
 					wg.justFocused = true;
 				}
 			}
+
+			// m_renderer->pushZIndex(999999);
+			// m_renderer->rect(prect, Color(1.0f, 0.0f, 0.0f, 1.0f));
+			// m_renderer->rect(parent, Color(0.0f, 1.0f, 0.0f, 1.0f));
+			// m_renderer->rect(clickableArea, Color(0.0f, 0.0f, 1.0f, 1.0f));
+			// m_renderer->popZIndex();
 
 			return wg;
 		}

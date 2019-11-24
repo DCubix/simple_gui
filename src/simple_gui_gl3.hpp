@@ -226,11 +226,18 @@ void main() {
 					g.vertices.push_back(Vert{ cmd.points[1].x, cmd.points[1].y, 0, 0, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
 				} break;
 				case Command::CmdDrawRect: {
-					g.prim = GL_LINE_LOOP;
+					g.prim = GL_LINES;
 					g.vertices.push_back(Vert{ cmd.points[0].x, cmd.points[0].y, 0, 0, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
 					g.vertices.push_back(Vert{ cmd.points[1].x, cmd.points[0].y, 1, 0, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
+					
+					g.vertices.push_back(Vert{ cmd.points[1].x, cmd.points[0].y, 1, 0, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
+					g.vertices.push_back(Vert{ cmd.points[1].x, cmd.points[1].y, 1, 1, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
+					
 					g.vertices.push_back(Vert{ cmd.points[1].x, cmd.points[1].y, 1, 1, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
 					g.vertices.push_back(Vert{ cmd.points[0].x, cmd.points[1].y, 0, 1, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
+
+					g.vertices.push_back(Vert{ cmd.points[0].x, cmd.points[1].y, 0, 1, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
+					g.vertices.push_back(Vert{ cmd.points[0].x, cmd.points[0].y, 0, 0, cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a });
 				} break;
 				case Command::CmdFillRect: {
 					g.prim = GL_TRIANGLES;
