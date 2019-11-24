@@ -63,13 +63,13 @@ int main(int argc, char** argv) {
 			static int fileSel = -1;
 			static int editSel = -1;
 			gui.pushLayout(0, 0, gui.textWidth("File") + 16, 0, Dock::DockLeft, 0);
-				if (gui.menu(GEN_ID, "File", &fileSel, { "New", "-", "Open", "Save", "-", "Exit" })) {
+				if (gui.menu("File", &fileSel, { "New", "-", "Open", "Save", "-", "Exit" })) {
 
 				}
 			gui.popLayout();
 
 			gui.pushLayout(0, 0, gui.textWidth("Edit") + 16, 0, Dock::DockLeft, 0);
-				if (gui.menu(GEN_ID, "Edit", &editSel, { "Undo", "Redo", "-", "Random Background" })) {
+				if (gui.menu("Edit", &editSel, { "Undo", "Redo", "-", "Random Background" })) {
 					if (editSel == 2) {
 						bg.r = float(std::rand()) / RAND_MAX;
 						bg.g = float(std::rand()) / RAND_MAX;
@@ -79,9 +79,13 @@ int main(int argc, char** argv) {
 			gui.popLayout();
 		gui.popContainer();
 
-		gui.pushScrollContainer(GEN_ID, 32, 32, 400, 400,  640, 640);
+		gui.pushScrollContainer(32, 32, 400, 400,  640, 640);
 			gui.pushLayout(0, 0, 120, 20, Dock::DockTop);
-				gui.button(GEN_ID + 3, "Testing");
+				gui.button("Button 1");
+			gui.popLayout();
+			gui.pushLayout(0, 0, 120, 20, Dock::DockTop);
+				static int ddsel = -1;
+				gui.dropdown(&ddsel, { "Item 0", "Item 1", "Item 2", "Item 3" });
 			gui.popLayout();
 		gui.popScrollContainer();
 

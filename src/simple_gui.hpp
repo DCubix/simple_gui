@@ -788,8 +788,8 @@ static const char* font_data =
 #include <memory>
 #include <tuple>
 
-#define GEN_ID (0xBEEF + __LINE__)
 #define SGUI_RENDERER_PRIORITY_HIGHEST 0xFFFF
+#define SGUI_NO_SELECTION (INT_MIN)
 
 namespace sgui {
 	using byte = unsigned char;
@@ -979,6 +979,7 @@ namespace sgui {
 	};
 
 	struct Widget {
+		int id;
 		bool justFocused, clickedOut;
 		WidgetState state{ WidgetState::StateNormal };
 		Rect parent, intersection;
@@ -1380,7 +1381,19 @@ namespace sgui {
 			if (!m_offsets.empty()) m_offsets.pop_back();
 		}
 
-		inline void pushScrollContainer(int id, int x, int y, int w, int h, int virtualWidth, int virtualHeight, Dock dock = Dock::DockNone, int pad = -1, int gap = -1) {
+		inline void pushID(int id) {
+			m_ids.push_back(m_id);
+			m_id = id;
+		}
+
+		inline void popID() {
+			if (!m_ids.empty()) {
+				m_id = m_ids.back();
+				m_ids.pop_back();
+			}
+		}
+
+		inline void pushScrollContainer(int x, int y, int w, int h, int virtualWidth, int virtualHeight, Dock dock = Dock::DockNone, int pad = -1, int gap = -1) {
 			const int scrollSize = 16;
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
 			const Color fg = prim.bright(2.0f);
@@ -1389,22 +1402,26 @@ namespace sgui {
 			pushLayout(x, y, w, h, dock, 0, 0);
 			Rect r = parentRegion().area;
 
-			if (m_scrollBars.find(id) == m_scrollBars.end()) m_scrollBars[id] = 0;
-			if (m_scrollBars.find(id + 1) == m_scrollBars.end()) m_scrollBars[id + 1] = 0;
+			pushID(-999);
+			int id1 = newID(), id2 = newID();
+
+			if (m_scrollBars.find(id1) == m_scrollBars.end()) m_scrollBars[id1] = 0;
+			if (m_scrollBars.find(id2) == m_scrollBars.end()) m_scrollBars[id2] = 0;
 			pushLayout(w - scrollSize, 0, scrollSize, h - scrollSize);
-				scroll(id, virtualHeight, &m_scrollBars[id], Orientation::Vertical);
+				scroll(id1, virtualHeight, &m_scrollBars[id1], Orientation::Vertical);
 			popLayout();
 
 			pushLayout(0, h - scrollSize, w - scrollSize, scrollSize);
-				scroll(id + 1, virtualWidth, &m_scrollBars[id + 1], Orientation::Horizontal);
+				scroll(id2, virtualWidth, &m_scrollBars[id2], Orientation::Horizontal);
 			popLayout();
+			popID();
 
 			m_renderer->rect(Rect(r.x + r.w - scrollSize, r.y + r.h - scrollSize, scrollSize, scrollSize), track, true);
 			m_renderer->rect(Rect(r.x + r.w - scrollSize, r.y + r.h - scrollSize, scrollSize, scrollSize), fg);
 
 			pushContainer(0, 0, w - scrollSize, h - scrollSize, Dock::DockNone, pad, 0);
 			pushLayout(0, 0, w - scrollSize, h - scrollSize, Dock::DockNone, 0, gap);
-			pushOffset(-m_scrollBars[id + 1], -m_scrollBars[id]);
+			pushOffset(-m_scrollBars[id2], -m_scrollBars[id1]);
 		}
 
 		inline void popScrollContainer() {
@@ -1557,8 +1574,8 @@ namespace sgui {
 			text(x, y, txt, Color(m_style[StyleProperty::PropTextColor]), overflow);
 		}
 
-		inline bool button(int id, const std::string& text) {
-			const Widget btn = widget(id);
+		inline bool button(const std::string& text) {
+			const Widget btn = widget();
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
 			const Color base = prim.bright(0.9f);
@@ -1586,8 +1603,8 @@ namespace sgui {
 			return btn.state == WidgetState::StatePressed;
 		}
 
-		inline bool slider(int id, float* v, float vmin = 0.0f, float vmax = 1.0f, const std::string& fmt = "%.3f") {
-			const Widget w = widget(id);
+		inline bool slider(float* v, float vmin = 0.0f, float vmax = 1.0f, const std::string& fmt = "%.3f") {
+			const Widget w = widget();
 			const Rect parent = w.parent;
 			const Rect shadow{ parent.x+1, parent.y+1, parent.w , parent.h };
 
@@ -1637,8 +1654,9 @@ namespace sgui {
 			return false;
 		}
 
-		inline bool edit(int id, std::string& text, bool obscure = false, int pad = 3, int color = -2) {
-			const Widget w = widget(id);
+		inline bool edit(std::string& text, bool obscure = false, int pad = 3, int color = -2) {
+			const Widget w = widget();
+			const int id = w.id;
 			const Rect parent = w.parent;
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
@@ -1800,8 +1818,8 @@ namespace sgui {
 			return changed;
 		}
 
-		inline bool toggle(int id, const std::string& text, bool* v) {
-			const Widget btn = widget(id);
+		inline bool toggle(const std::string& text, bool* v) {
+			const Widget btn = widget();
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
 			const Color base = prim.bright(0.9f);
@@ -1834,8 +1852,8 @@ namespace sgui {
 			return false;
 		}
 
-		inline bool list(int id, int* selected, const std::vector<std::string>& items) {
-			const Widget w = widget(id);
+		inline bool list(int* selected, const std::vector<std::string>& items) {
+			const Widget w = widget();
 			const Rect parent = w.parent;
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
@@ -1873,52 +1891,15 @@ namespace sgui {
 			m_renderer->rect(parent, fg);
 
 			if (w.clickedOut) {
-				m_state.focusedItem = -1;
-				m_state.prioritizedItem = -1;
+				m_state.focusedItem = SGUI_NO_SELECTION;
+				m_state.prioritizedItem = SGUI_NO_SELECTION;
 			}
 
 			return changed;
 		}
 
-		inline bool dropdown(int id, int* selected, const std::vector<std::string>& items) {
-			LayoutRegion reg = parentRegion();
-			std::string sel = *selected >= 0 ? items[*selected] : "Nothing Selected";
-
-			pushLayout(0, 0, reg.area.w, reg.area.h);
-				button(id, "");
-				pushLayout(0, 0, reg.area.w - 22, reg.area.h);
-					const int tw = textWidth(sel);
-					const int th = textHeight(sel);
-					LayoutRegion pr = parentRegion();
-					Rect p = pr.area;
-
-					m_renderer->clip(p.grow(-3));
-					this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, sel, Overflow::OverfowEllipses);
-					m_renderer->unclip();
-				popLayout();
-				chr(reg.area.x + reg.area.w - 18, reg.area.y + reg.area.h / 2 - 8, '\x7f', Color(m_style[StyleProperty::PropTextColor]));
-			popLayout();
-
-			bool changed = false;
-			if (m_state.focusedItem == id) {
-				m_state.prioritizedItem = id;
-				pushLayout(0, reg.area.h, reg.area.w, 100);
-					m_renderer->pushZIndex(SGUI_RENDERER_PRIORITY_HIGHEST);
-						changed = list(id, selected, items);
-					m_renderer->popZIndex();
-					Rect lst = parentRegion().asRect();
-					if (lst.contains(m_input->mousePosition()) && m_input->isMouseButtonReleased(1)) {
-						m_state.focusedItem = -1;
-						m_state.prioritizedItem = -1;
-					}
-				popLayout();
-			}
-
-			return changed;
-		}
-		
-		inline bool menu(int id, const std::string& text, int* selected, const std::vector<std::string>& items) {
-			const Widget btn = widget(id);
+		inline bool menu(const std::string& text, int* selected, const std::vector<std::string>& items) {
+			const Widget btn = widget();
 
 			const Color prim = Color(m_style[StyleProperty::PropPrimaryColor]);
 			const Color base = prim.bright(0.9f);
@@ -1939,7 +1920,7 @@ namespace sgui {
 			this->text(p.w / 2 - tw / 2, p.h / 2 - th / 2, text, Color(m_style[StyleProperty::PropTextColor]));
 
 			bool clicked = false, activeItem = false;
-			if (m_state.prioritizedItem == id) {
+			if (m_state.prioritizedItem == btn.id) {
 				int mw = -1;
 				for (auto txt : items) {
 					if (txt == "-") continue;
@@ -1979,8 +1960,8 @@ namespace sgui {
 									if (m_input->isMouseButtonReleased(1)) {
 										*selected = i;
 										clicked = true;
-										m_state.focusedItem = -1;
-										m_state.prioritizedItem = -1;
+										m_state.focusedItem = SGUI_NO_SELECTION;
+										m_state.prioritizedItem = SGUI_NO_SELECTION;
 									}
 								}
 								this->text(pr.pad, y, txt, Color(m_style[StyleProperty::PropTextColor]));
@@ -1991,14 +1972,14 @@ namespace sgui {
 					m_renderer->popZIndex();
 				popLayout();
 			} else {
-				if (btn.state == WidgetState::StatePressed && m_state.focusedItem == id) {
-					m_state.prioritizedItem = id;
+				if (btn.state == WidgetState::StatePressed && m_state.focusedItem == btn.id) {
+					m_state.prioritizedItem = btn.id;
 				}
 			}
 
 			if (!activeItem && btn.clickedOut) {
-				m_state.focusedItem = -1;
-				m_state.prioritizedItem = -1;
+				m_state.focusedItem = SGUI_NO_SELECTION;
+				m_state.prioritizedItem = SGUI_NO_SELECTION;
 			}
 
 			return clicked;
@@ -2042,10 +2023,13 @@ namespace sgui {
 
 		inline std::array<int, StylePropCount>& style() { return m_style; }
 
+		inline int newID() { return m_id++; }
+		inline int currentID() const { return m_id - 1; }
+
 		inline void prepare() {
 			m_renderer->begin();
 			m_renderer->unclip();
-			//m_scrollBars.clear();
+			m_id = 0;
 		}
 
 		inline void finish(int width, int height) {
@@ -2063,7 +2047,7 @@ namespace sgui {
 			TextBoxState text{};
 			WidgetState state{ WidgetState::StateNormal };
 
-			int focusedItem{ -1 }, prioritizedItem{ -1 };
+			int focusedItem{ SGUI_NO_SELECTION }, prioritizedItem{ SGUI_NO_SELECTION };
 		} m_state;
 
 		std::unique_ptr<Renderer> m_renderer;
@@ -2072,11 +2056,13 @@ namespace sgui {
 		std::vector<LayoutRegion> m_layoutRegions;
 		std::vector<Rect> m_rects;
 		std::vector<Point> m_offsets;
-
+		std::vector<int> m_ids;
 		std::map<int, float> m_scrollBars;
 
 		std::array<int, StylePropCount> m_style;
 		void* m_font;
+
+		int m_id{ 0 };
 
 		inline bool clearTextSelection(std::string& text) {
 			if (m_state.text.selectionStart != -1) {
@@ -2100,11 +2086,13 @@ namespace sgui {
 			return tokens;
 		}
 
-		inline Widget widget(int id) {
+		inline Widget widget(int ovid = -1) {
+			const int id = ovid == -1 ? newID() : ovid;
 			Rect prect = parentRect();
 			Rect parent = parentRegion().asRect();
 			Rect clickableArea = prect.intersection(parent);
 			Widget wg;
+			wg.id = id;
 			wg.state = m_state.state;
 			wg.parent = parent;
 			wg.intersection = clickableArea;
@@ -2112,7 +2100,7 @@ namespace sgui {
 			wg.clickedOut = false;
 			
 			if (m_state.state != WidgetState::StateDisabled &&
-				(m_state.prioritizedItem == -1 || m_state.prioritizedItem == id) &&
+				(m_state.prioritizedItem == SGUI_NO_SELECTION || m_state.prioritizedItem == id) &&
 				prect.overlaps(parent)
 			) {
 				if (clickableArea.contains(m_input->mousePosition())) {
@@ -2135,11 +2123,11 @@ namespace sgui {
 				}
 			}
 
-			// m_renderer->pushZIndex(999999);
-			// m_renderer->rect(prect, Color(1.0f, 0.0f, 0.0f, 1.0f));
-			// m_renderer->rect(parent, Color(0.0f, 1.0f, 0.0f, 1.0f));
-			// m_renderer->rect(clickableArea, Color(0.0f, 0.0f, 1.0f, 1.0f));
-			// m_renderer->popZIndex();
+			m_renderer->pushZIndex(999999);
+			m_renderer->rect(prect, Color(1.0f, 0.0f, 0.0f, 1.0f));
+			m_renderer->rect(parent, Color(0.0f, 1.0f, 0.0f, 1.0f));
+			m_renderer->rect(clickableArea, Color(0.0f, 0.0f, 1.0f, 1.0f));
+			m_renderer->popZIndex();
 
 			return wg;
 		}
